@@ -7,6 +7,22 @@
 
 ---
 
+## Terminology
+
+| Term | Definition |
+|------|------------|
+| **Atom** | The fundamental work item (task, bug, feature, etc.) |
+| **Bond** | A dependency relationship between two atoms |
+| **Molecule** | A container or root atom with child atoms |
+| **Formula** | A template for creating molecules with variables and structured dependencies |
+| **Phase** | Whether an atom is **persistent** (synced to git) or **ephemeral** (local-only, git-ignored) |
+| **Ready** | An atom with no blocking dependencies, available for work |
+| **Abstract type** | An atom type excluded from ready work queries (e.g., formulae don't appear in `el ready`) |
+
+See `docs/MEOW.md` for the complete Molecular Expression of Work specification.
+
+---
+
 ## Architecture Overview
 
 ```
@@ -48,12 +64,33 @@ Eluent
 }
 ```
 
-**ID Format**: `{repo_name}-{random_64_bits}.{child-id[optional]}.{grandchild-id[optional]}` (e.g., `eluent-3kTm9vXpQ2z.1.3`)
+**config.yaml schema**:
+```yaml
+repo_name: eluent           # Repository identifier used in atom IDs
+defaults:
+  priority: 2               # Default priority for new atoms (1-5)
+  issue_type: task          # Default atom type
+ephemeral:
+  cleanup_days: 7           # Auto-prune ephemeral items older than this
+compaction:
+  tier1_days: 30            # Tier 1 compaction after 30 days
+  tier2_days: 90            # Tier 2 compaction after 90 days
+```
 
-ID generation requirements
+**ID Format**: `{repo_name}-{base62_random}.{child}.{grandchild}...`
+
+ID generation requirements:
 - **Source**: Cryptographically secure random bytes (64 bits minimum)
 - **Encoding**: Base62 (a-zA-Z0-9) for URL-safe, compact identifiers
 - **Length**: ~11 characters for 64-bit entropy
+- **Child IDs**: Arbitrary strings appended with `.` delimiter; must be unique within parent scope
+
+**Examples**:
+- `eluent-3kTm9vXpQ2z` — Root atom
+- `eluent-3kTm9vXpQ2z.1` — First child (numeric)
+- `eluent-3kTm9vXpQ2z.1.3` — Third grandchild of first child
+- `eluent-3kTm9vXpQ2z.docs` — Child using semantic name
+- `eluent-3kTm9vXpQ2z.docs.guide` — Nested semantic naming
 ---
 
 ## CLI Commands
@@ -78,7 +115,11 @@ el plugin [name] list|install|enable|disable|hook # Plugin management
 ```
 
 **Interactive Mode**: By default, commands with missing data (necessary fields not provided as arguments, etc.) launches TTY prompt for guided input.
-**Structured Output Mode**: `--robot` (universal modifier) emits structured JSON output for any command and does NOT run interactively or use rich formatting.
+
+**Structured Output Mode**: `--robot` (universal modifier) emits structured JSON output for any command. When `--robot` is set:
+- Output is machine-parseable JSON
+- Interactive prompts are disabled; commands that require input return an error instead
+- Rich formatting (colors, spinners, tables) is disabled
 
 ### Ready Work Options
 
@@ -93,6 +134,35 @@ The `el ready` command supports:
   - `--assignee=USER` — Filter by assignee
   - `--label=LABEL` — Filter by label
   - `--priority=LEVEL` — Filter by priority level
+
+### Update Command
+
+`el update ID [options]` modifies atom fields:
+- `--title=TEXT` — Update title
+- `--description=TEXT` — Update description
+- `--priority=LEVEL` — Update priority (1-5)
+- `--type=TYPE` — Change atom type
+- `--assignee=USER` — Assign/reassign
+- `--label=LABEL` — Add label (repeatable)
+- `--remove-label=LABEL` — Remove label
+- `--status=STATUS` — Change status directly
+- `--persist` — Convert ephemeral atom to persistent (moves from `ephemeral.jsonl` to `data.jsonl`)
+
+### Discard Command
+
+`el discard` provides soft deletion with recovery:
+
+```bash
+el discard ID              # Set atom status to 'discard' (soft delete)
+el discard list            # List all discarded atoms
+el discard restore ID      # Restore discarded atom to previous status
+el discard prune           # Permanently delete old discards (default: >30 days)
+el discard prune --all     # Permanently delete all discards immediately
+el discard prune --ephemeral  # Permanently delete discarded ephemeral items
+```
+
+**Workflow**: Discarded atoms are excluded from `el list` and `el ready` by default. Use `el list --include-discarded` to see them.
+
 ---
 
 ## Key Files to Create
@@ -194,11 +264,28 @@ spec.add_dependency "httpx", "~> 1.3"
 
 ## Daemon Protocol
 
-Length-prefixed JSON over Unix sockets:
-- **Request**: `{ "cmd": "list", "args": {...}, "id": "req-123" }`
-- **Response**: `{ "id": "req-123", "status": "ok", "data": {...} }`
+**Purpose**: The daemon coordinates concurrent reads/writes for multiple agents or CLI instances across repositories. It maintains authoritative in-memory state and serializes access to storage files. Not required for single-agent/single-repo use—CLI can operate directly on files.
 
-Socket path: `~/.eluent/daemon.sock`
+**Transport**: Length-prefixed JSON over Unix sockets.
+- **Length prefix**: 4-byte big-endian uint32 (message size in bytes)
+- **Socket path**: `~/.eluent/daemon.sock`
+
+**Request format**:
+```json
+{ "cmd": "list", "args": {"type": "task"}, "id": "req-123" }
+```
+
+**Success response**:
+```json
+{ "id": "req-123", "status": "ok", "data": {...} }
+```
+
+**Error response**:
+```json
+{ "id": "req-123", "status": "error", "error": {"code": "NOT_FOUND", "message": "Atom not found: eluent-xyz"} }
+```
+
+**Error codes**: `NOT_FOUND`, `INVALID_REQUEST`, `CONFLICT`, `STORAGE_ERROR`, `INTERNAL_ERROR`
 
 ---
 
@@ -253,10 +340,11 @@ Work items can be created in two phases:
 - Use for: planned work, features, bugs, releases
 
 **Ephemeral Phase**:
-- NOT persisted to disk storage, runs in-memory
-- NOT synced to shared storage
+- Stored in `.eluent/ephemeral.jsonl` (git-ignored, local-only)
+- NOT synced to git or shared storage
+- Persists locally across sessions (survives CLI/daemon restarts)
 - Automatic cleanup after configurable duration (default: 7 days)
-- Use for: diagnostics, patrols, operational checks, scratch work
+- Use for: grunt work, diagnostics, patrols, operational checks 
 
 **Usage**:
 ```bash
@@ -268,7 +356,7 @@ el formula instantiate release-checks --ephemeral
 
 **Phase Transitions**:
 - `el update ID --persist` — Convert ephemeral item to persistent (moves to main storage)
-- Closing ephemeral items: optionally create a persistent summary via `--compress`
+- Ephemeral items can be closed normally; they remain in `ephemeral.jsonl` until auto-cleanup or manual prune
 
 ---
 
@@ -327,7 +415,7 @@ Eluent::Plugins.register "my_plugin" do
   # Type registration
   register_issue_type :custom_type,
     required_fields: [:custom_field],
-    abstract: true  # false by default, true to exclude from ready work
+    abstract: true  # Abstract types (e.g., epic, molecule) are containers—excluded from `el ready`
 
   register_dependency_type :custom_dep,
     blocking: false,  # false by default, true affects readiness
@@ -375,10 +463,10 @@ end
 
 ### Critical Test Cases
 
-1. **Daemon Orchestrator user flows**:
-   - Work parceling and processing loop
-   - Concurrent command handling
-   - Authoritative state management
+1. **Daemon concurrent access**:
+   - Multiple CLI clients sending commands simultaneously
+   - Read-write contention (one client listing while another creates)
+   - Atomic state updates (no partial writes visible)
 2. **Cycle detection edge cases**:
    - Complex DAG scenarios with multiple paths
    - Self-referential prevention
