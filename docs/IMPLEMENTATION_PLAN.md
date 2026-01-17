@@ -289,6 +289,23 @@ spec.add_dependency "httpx", "~> 1.3"
 
 ---
 
+## Error Codes Reference
+
+| Code | HTTP-equiv | Description |
+|------|------------|-------------|
+| `NOT_FOUND` | 404 | Item/resource does not exist |
+| `INVALID_REQUEST` | 400 | Malformed request or invalid parameters |
+| `CONFLICT` | 409 | Operation conflicts with current state |
+| `CYCLE_DETECTED` | 422 | Dependency would create cycle |
+| `SELF_REFERENCE` | 422 | Item cannot depend on itself |
+| `STORAGE_ERROR` | 500 | File system or storage failure |
+| `TIMEOUT` | 504 | Operation exceeded time limit |
+| `ENCODING_ERROR` | 400 | Invalid UTF-8 or encoding issue |
+| `VALIDATION_ERROR` | 422 | Value fails validation (enum, pattern) |
+| `INTERNAL_ERROR` | 500 | Unexpected error |
+
+---
+
 ## Dependency Types
 
 Blocking dependency types
@@ -478,6 +495,237 @@ end
 7. **All blocking types**: Test `blocks`, `parent-child`, `conditional-blocks`, `waits-for`
 8. **Automatic molecule completion if configured** All children closed → molecule closes
 9. **ID collision resistance**: Generate 10M IDs, verify no collisions (statistical test)
+10. **Self-referential dependency rejection**: Verify A→A is rejected
+11. **Cross-repo cycle detection**: A in repo1 → B in repo2 → A (cycle)
+12. **Conditional-blocks skip behavior**: Target succeeds → dependent skipped
+13. **Waits-for with dynamic children**: Add child after waits-for, verify blocking
+14. **Ephemeral persistence transition**: During cleanup window, verify no data loss
+15. **Formula variable collision in composition**: Same var, different defaults → warning
+16. **Sync resurrection**: Local delete + remote edit → item restored
+17. **Comment deduplication**: Same comment from two sources → single entry
+18. **Daemon stale socket cleanup**: Old socket file → removed and recreated
+19. **Unicode edge cases**: Emoji in titles, RTL text, combining characters
+
+### Edge Cases and Error Handling
+
+#### Dependency Edge Cases
+
+**Self-referential Prevention**
+- Reject `add_dependency(A, A, *)` for any dependency type
+- Error: `SelfReferenceError`
+
+**Transitive Cycle Detection**
+- Check path existence in both directions before adding edge
+- Example: A→B, B→C exists; reject C→A (creates A→B→C→A)
+- Cross-repo cycles: Must traverse registry to check external repos
+- Error: `CycleDetectedError` with cycle path for debugging
+
+**Cross-Repo Dependency Resolution**
+- If target repo not in registry: return `UnresolvedDependency` (blocking assumed)
+- If target repo registered but unavailable: cache last-known state, warn user
+- Network/filesystem errors: do not silently fail; surface to user
+
+**Parent-Child Blocking Cascade**
+- `BlockingResolver.blocked?(item)` must recursively check all ancestors
+- Implementation: Walk `parent_id` chain until root or blocked ancestor found
+- Performance: Cache ancestry at load time; invalidate on parent_id change
+
+**Conditional-Blocks Failure Detection**
+- Failure indicated by `close_reason` matching pattern: `/^(fail|error|abort)/i`
+- Success: all other close_reason values OR nil/empty
+- When target closes successfully: mark dependent as `status: closed, close_reason: "skipped: condition not met"`
+- Skipped items excluded from ready work; can be reopened manually
+
+**Waits-For Transitive Closure**
+- Must wait for target AND all descendants of target (recursive)
+- Dynamically added children: If child added to target after waits-for created, source automatically waits for new child
+- Nested waits-for: A waits-for B, B waits-for C → A implicitly waits for C (transitive)
+- Implementation: `BlockingResolver` computes closure at query time, not creation time
+
+#### Status Edge Cases
+
+**Blocked as Stored vs. Computed**
+- Decision: Store `blocked` as explicit status field (not computed)
+- Rationale: Simplifies sync merge (LWW on status field)
+- Trade-off: Must update status on dependency changes; use hooks
+
+**Status Transition Atomicity**
+- All status changes must be atomic (single JSONL append)
+- Concurrent transitions: Last-Write-Wins via `updated_at`
+- Daemon serializes writes; CLI uses file locking
+
+**Deferred Expiry Check**
+- Evaluation: Lazy (at query time, not background job)
+- `el ready` checks `defer_until < now` for each candidate
+- No automatic status change; deferred items simply appear when ready
+- Edge case: Clock skew between machines → use UTC everywhere
+
+**Abstract Type List**
+- Types excluded from `el ready` by default: `epic`, `molecule`, `formula`
+- Custom abstract types registered via plugin: `abstract: true` flag
+- `el ready --include-abstract` overrides for debugging
+
+#### Sync Edge Cases
+
+**Resurrection Rule (Edit vs. Delete)**
+- Local: item in `discard` state; Remote: item edited (updated_at newer)
+- Resolution: Restore item with remote edits; clear discard status
+- Implementation: 3-way merge treats `discard` as "soft tombstone"
+
+**Concurrent Deletion**
+- Both local and remote delete same item → item stays deleted
+- One deletes, one closes → closer timestamp wins (restore if edit newer)
+
+**Dependency Merging**
+- Strategy: Union + Deduplicate by (source_id, target_id, dependency_type)
+- Ordering: Sort by created_at for deterministic order
+- Conflict: Same edge with different metadata → merge metadata maps
+
+**Comment Deduplication**
+- Key: SHA256(author + created_at + content) → 16-char hex prefix
+- Duplicate detection: On sync, skip comments with matching hash
+- Ordering: Sort by created_at ascending (UTC)
+
+**Metadata Preservation**
+- Unknown keys in atom.metadata: Preserve during sync (union merge)
+- Conflicting values for same key: LWW by updated_at
+- Nested metadata: Not supported; flatten before sync
+
+**Sync During Active Work**
+- Items with `status: in_progress` and `assignee: local_agent`: warn before push
+- Option: `--force` to push anyway; `--stash` to defer those items
+
+#### Ephemeral Edge Cases
+
+**Cleanup Trigger Points**
+- CLI: On startup of any `el` command (after config load, before execution)
+- Daemon: Every 60 seconds via background timer
+- Cleanup order: Check timestamps first, then delete (avoid race with persist transition)
+
+**Persistence Transition Atomicity**
+- `el update ID --persist` must:
+  1. Read from ephemeral.jsonl
+  2. Write to data.jsonl
+  3. Remove from ephemeral.jsonl
+- Use file locking to prevent cleanup between steps 1-3
+
+**Ephemeral Cross-Repo Dependencies**
+- Ephemeral items CAN depend on persistent items (same or other repo)
+- Persistent items CANNOT depend on ephemeral items (rejected at creation)
+- Rationale: Ephemeral items may disappear; persistent deps must be stable
+
+**Discard + Ephemeral Interaction**
+- Discarded ephemeral items cleaned up by `el discard prune --ephemeral`
+- Non-discarded ephemeral items cleaned up by age (cleanup_days config)
+- Closed ephemeral items remain until age threshold OR manual prune
+
+#### Formula Edge Cases
+
+**Variable Validation Modes**
+- Default: Lenient (unknown variables left as literal `{{name}}`)
+- Strict mode (`--strict`): Unknown variables cause `UnknownVariableError`
+- Enum validation: If `enum` specified, value must match one option
+- Pattern validation: If `pattern` specified, value must match regex
+- Validation order: Required check → Default apply → Enum check → Pattern check
+
+**Composition Variable Scoping**
+- Same variable in both formulas: Single prompt/value used for both
+- Explicit scoping: `formula_a.version` and `formula_b.version` for disambiguation
+- Collision detection: Warn if same variable has different defaults
+
+**Conditional Composition Failure**
+- Same as conditional-blocks: `close_reason` pattern matching
+- Formula B runs only if Formula A's root item fails
+- Skipped formulas: Root item created with `status: closed, close_reason: "skipped"`
+
+**Formula Cycle Prevention**
+- Before composition: Check if Formula B contains reference to Formula A
+- Error: `FormulaRecursionError`
+- Nested composition: Allowed but cycles still rejected
+
+**Instantiation with Missing Parent**
+- If `parent_id` provided but doesn't exist: `ParentNotFoundError`
+- If parent exists but is closed: Warn, allow (formula may be for follow-up)
+
+#### ID Generation Edge Cases
+
+**Child ID Uniqueness Scope**
+- Child IDs unique within parent scope only (not globally)
+- Example: `eluent-abc.1` and `eluent-xyz.1` can both exist
+- Full ID (including parent prefix) is globally unique
+
+**Collision Detection and Recovery**
+- On ID generation, check existence before write
+- If collision detected (astronomically unlikely with 64-bit entropy): Generate new ID
+- Log collision event for monitoring
+- Statistical test: 10M IDs must have 0 collisions (implementation verification)
+
+**ID Format Validation**
+- Regex: `^[a-zA-Z0-9_-]+-[a-zA-Z0-9]{8,}(\.[a-zA-Z0-9_-]+)*$`
+- Reject IDs not matching format on import/create
+- Cross-repo IDs: Must include repo prefix
+
+#### Compaction Edge Cases
+
+**Compaction Trigger**
+- Manual only: `el compact [--tier=1|2]`
+- No automatic compaction (user controls when history is reduced)
+- Sync does NOT trigger compaction
+
+**Compaction Reversibility**
+- Tier 1 → Tier 2: Original content lost (only Tier 1 summary preserved)
+- Recovery: `el restore ID` retrieves from git history if available
+- Implementation: Store pre-compaction content hash; query git for matching blob
+
+**Dependency Preservation**
+- Compacted items retain all inbound/outbound dependency edges
+- Metadata on dependencies: Preserved (not compacted)
+- Comments: Summarized to single "Summary of N comments" entry
+
+**Concurrent Compaction and Sync**
+- Compaction creates new JSONL entries; old entries remain until git gc
+- Sync merges compacted and non-compacted versions: Non-compacted wins (more data)
+- Race condition: Compacting while sync in progress → Retry sync after compact
+
+#### Daemon Edge Cases
+
+**Socket Permission and Cleanup**
+- Socket path: `~/.eluent/daemon.sock`
+- Permissions: 0600 (user only)
+- Stale socket detection: If socket exists but daemon not running, delete and recreate
+- Multiple daemon prevention: PID file at `~/.eluent/daemon.pid`
+
+**Request Timeout**
+- Default: 30 seconds for operations
+- Long operations (sync): 5 minute timeout
+- Timeout error: `TimeoutError` with operation context
+
+**Daemon Crash Recovery**
+- Daemon writes in-memory state to disk every 5 seconds
+- On restart: Load from disk, replay any unconfirmed operations
+- Client retry: If daemon unreachable, CLI falls back to direct file access
+
+#### Miscellaneous Edge Cases
+
+**Empty Repository**
+- `el list` on empty repo: Return empty list, no error
+- `el ready` on empty repo: Return empty list with hint message
+- `el sync` on empty repo: Create initial commit with empty data.jsonl
+
+**Very Long Titles/Descriptions**
+- Title max: 500 characters (truncate with warning)
+- Description max: 64KB (reject if larger)
+- Comment max: 64KB per comment
+
+**Unicode and Encoding**
+- All text fields: UTF-8 encoded
+- Invalid UTF-8: Reject at input with `EncodingError`
+- Normalization: NFC form for consistent comparison
+
+**Timezone Handling**
+- All timestamps: UTC (ISO 8601 format with Z suffix)
+- Display: Convert to local timezone for human output
+- Input: Accept local times, convert to UTC for storage
 
 ### Manual Testing
 
