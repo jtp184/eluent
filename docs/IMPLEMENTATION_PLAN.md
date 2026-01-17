@@ -40,6 +40,81 @@ Eluent
 ├── Plugins        # PluginManager, PluginContext, Hooks, GemLoader
 └── Agents         # AgentExecutor, ClaudeExecutor, OpenAIExecutor
 ```
+
+### Control Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              User / Agent                               │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          CLI (exe/el)                                   │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │   Commands  │  │  Middleware │  │  Formatter  │  │   --robot   │     │
+│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘     │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    │                               │
+                    ▼                               ▼
+        ┌───────────────────┐           ┌───────────────────┐
+        │   Direct Mode     │           │   Daemon Mode     │
+        │  (single-user)    │           │  (multi-client)   │
+        └───────────────────┘           └───────────────────┘
+                    │                               │
+                    │                               ▼
+                    │                   ┌───────────────────┐
+                    │                   │  Unix Socket IPC  │
+                    │                   │  (~/.eluent/      │
+                    │                   │   daemon.sock)    │
+                    │                   └───────────────────┘
+                    │                               │
+                    │                               ▼
+                    │                   ┌───────────────────┐
+                    │                   │     Daemon        │
+                    │                   │  ┌─────────────┐  │
+                    │                   │  │CommandRouter│  │
+                    │                   │  │ In-Memory   │  │
+                    │                   │  │   Index     │  │
+                    │                   │  └─────────────┘  │
+                    │                   └───────────────────┘
+                    │                               │
+                    └───────────────┬───────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Storage Layer                                   │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐          │
+│  │ JsonlRepository │  │    Indexer      │  │  Serializers    │          │
+│  │  (file locking) │  │ (in-memory)     │  │ (JSON encode)   │          │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘          │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         .eluent/ Directory                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                   │
+│  │  data.jsonl  │  │ephemeral.jsonl  │ config.yaml  │                   │
+│  │  (tracked)   │  │ (git-ignored)│  │  (tracked)   │                   │
+│  └──────────────┘  └──────────────┘  └──────────────┘                   │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Git Sync Layer                                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │ GitAdapter  │  │ MergeEngine │  │  Conflict   │  │  SyncState  │     │
+│  │             │  │  (3-way)    │  │  Resolver   │  │             │     │
+│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘     │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Mode Selection**:
+- **Direct Mode** (default): CLI reads/writes files directly with file locking. Suitable for single-user workflows.
+- **Daemon Mode**: CLI sends requests to daemon via Unix socket. Used for concurrent multi-agent access. Activate with `el daemon start`.
+
 ---
 
 ## Data Storage (`.eluent/`)
@@ -49,7 +124,7 @@ Eluent
 ├── config.yaml         # Repository-level configuration
 ├── data.jsonl          # Atoms, Bonds, Comments, etc. (one JSON per line)
 ├── ephemeral.jsonl     # Local-only ephemeral items (git-ignored)
-├── formulas/           # Formula definitions (YAML)
+├── formulas/           # Formula definitions (JSON)
 ├── plugins/            # Local plugin scripts (.rb)
 └── .sync-state         # Last sync metadata (JSON)
 ```
@@ -77,6 +152,27 @@ compaction:
   tier2_days: 90            # Tier 2 compaction after 90 days
 ```
 
+**Configuration Validation**:
+
+| Field | Type | Constraints | Default |
+|-------|------|-------------|---------|
+| `repo_name` | string | `^[a-z][a-z0-9_-]{0,31}$` (lowercase, 1-32 chars) | directory name |
+| `defaults.priority` | integer | 1-5 | 2 |
+| `defaults.issue_type` | string | registered type name | `task` |
+| `ephemeral.cleanup_days` | integer | 1-365 | 7 |
+| `compaction.tier1_days` | integer | 1-365 | 30 |
+| `compaction.tier2_days` | integer | > tier1_days, ≤730 | 90 |
+
+**Validation Behavior**:
+- On load: Validate all fields against constraints
+- Invalid value: Log warning, use default
+- Unknown keys: Preserve (forward compatibility), log at DEBUG level
+- Missing file: Create with defaults on first write operation
+
+```
+el: warning: config.yaml: defaults.priority must be 1-5, got 10; using default (2)
+```
+
 **ID Format**: `{repo_name}-{base62_random}.{child}.{grandchild}...`
 
 ID generation requirements:
@@ -91,6 +187,64 @@ ID generation requirements:
 - `eluent-3kTm9vXpQ2z.1.3` — Third grandchild of first child
 - `eluent-3kTm9vXpQ2z.docs` — Child using semantic name
 - `eluent-3kTm9vXpQ2z.docs.guide` — Nested semantic naming
+
+### JSONL Record Formats
+
+Each line in `data.jsonl` is a JSON object with a `_type` discriminator field:
+
+**Atom**:
+```json
+{
+  "_type": "atom",
+  "id": "eluent-3kTm9vXpQ2z",
+  "title": "Implement user authentication",
+  "description": "Add OAuth2 login flow with Google and GitHub providers",
+  "status": "open",
+  "issue_type": "task",
+  "priority": 2,
+  "labels": ["auth", "backend"],
+  "assignee": "claude",
+  "parent_id": null,
+  "defer_until": null,
+  "close_reason": null,
+  "created_at": "2025-01-15T10:00:00Z",
+  "updated_at": "2025-01-15T10:00:00Z",
+  "metadata": {}
+}
+```
+
+**Bond** (dependency relationship):
+```json
+{
+  "_type": "bond",
+  "source_id": "eluent-3kTm9vXpQ2z.2",
+  "target_id": "eluent-3kTm9vXpQ2z.1",
+  "dependency_type": "blocks",
+  "created_at": "2025-01-15T10:05:00Z",
+  "metadata": {}
+}
+```
+
+**Comment**:
+```json
+{
+  "_type": "comment",
+  "id": "eluent-3kTm9vXpQ2z-c1",
+  "issue_id": "eluent-3kTm9vXpQ2z",
+  "author": "claude",
+  "content": "Completed OAuth2 integration. PR #42 ready for review.",
+  "created_at": "2025-01-15T11:30:00Z"
+}
+```
+
+**Field Notes**:
+- `_type`: Discriminator for polymorphic deserialization (required)
+- `status`: One of `open`, `in_progress`, `blocked`, `deferred`, `closed`, `discard`; Extensible via plugins
+- `metadata`: Reserved for plugin-specific data; preserved during sync
+- `priority`: Integer (0-5, 0 = highest priority)
+- `dependency_type`: See Dependency Types section for valid values
+- `issue_type`: Extensible via plugins; built-in types: `task`, `bug`, `feature`, `epic`, `chore`, `artifact`, `formula`
+
 ---
 
 ## CLI Commands
@@ -246,19 +400,53 @@ el discard prune --ephemeral  # Permanently delete discarded ephemeral items
 
 ## Dependencies (Gemspec)
 
-```ruby
-# CLI
-spec.add_dependency "tty-prompt", "~> 0.23"
-spec.add_dependency "tty-table", "~> 0.12"
-spec.add_dependency "tty-spinner", "~> 0.9"
-spec.add_dependency "tty-box", "~> 0.7"
-spec.add_dependency "tty-tree", "~> 0.4"
-spec.add_dependency "tty-option", "~> 0.3"
-spec.add_dependency "pastel", "~> 0.8"
+### Runtime Dependencies
 
-# HTTP for AI
-spec.add_dependency "httpx", "~> 1.3"
+```ruby
+# CLI interaction
+spec.add_dependency "tty-prompt", "~> 0.23"   # Interactive prompts
+spec.add_dependency "tty-table", "~> 0.12"    # Table formatting
+spec.add_dependency "tty-spinner", "~> 0.9"   # Progress spinners
+spec.add_dependency "tty-box", "~> 0.7"       # Box drawing for show command
+spec.add_dependency "tty-tree", "~> 0.4"      # Tree visualization for dep tree
+spec.add_dependency "tty-option", "~> 0.3"    # CLI argument parsing
+spec.add_dependency "pastel", "~> 0.8"        # Terminal colors
+
+# HTTP for AI integrations
+spec.add_dependency "httpx", "~> 1.3"         # HTTP/2 client for Claude/OpenAI
 ```
+
+### Development Dependencies
+
+```ruby
+# Testing
+spec.add_development_dependency "rspec", "~> 3.13"
+spec.add_development_dependency "fakefs", "~> 2.5"      # Filesystem mocking
+spec.add_development_dependency "timecop", "~> 0.9"    # Time manipulation
+spec.add_development_dependency "webmock", "~> 3.23"   # HTTP request stubbing
+
+# Type checking
+spec.add_development_dependency "steep", "~> 1.6"      # Gradual typing
+spec.add_development_dependency "rbs", "~> 3.4"        # Type signatures
+
+# Code quality
+spec.add_development_dependency "rubocop", "~> 1.60"
+spec.add_development_dependency "rubocop-rspec", "~> 2.26"
+```
+
+### Dependency Rationale
+
+**Included**:
+- `tty-*` suite: Mature, well-maintained, composable CLI components with consistent API
+- `httpx`: HTTP/2 support, connection pooling, modern Ruby idioms
+- `pastel`: Zero-dependency terminal colors, thread-safe
+
+**Explicitly Not Included**:
+- `thor`: Heavy, opinionated CLI framework; `tty-option` is lighter and more flexible
+- `dry-*` ecosystem: Adds complexity; Ruby 4.0 provides sufficient built-in validation
+- `sequel`/`activerecord`: JSONL storage is simpler than ORM for append-only workloads
+- `concurrent-ruby`: Ruby 4.0's Ractor and improved threading sufficient for daemon
+- `oj`/`yajl`: stdlib `JSON` is fast enough; avoid native extension complexity
 
 ---
 
@@ -287,6 +475,50 @@ spec.add_dependency "httpx", "~> 1.3"
 
 **Error codes**: `NOT_FOUND`, `INVALID_REQUEST`, `CONFLICT`, `STORAGE_ERROR`, `INTERNAL_ERROR`
 
+### Daemon Lifecycle
+
+**Detection Logic** (CLI startup):
+```
+1. Check PID file (~/.eluent/daemon.pid)
+2. If exists, verify process is running (kill -0)
+3. If running, attempt socket connection (~/.eluent/daemon.sock)
+4. If socket responds, use daemon mode
+5. Otherwise, fall back to direct mode
+```
+
+**Startup Sequence** (`el daemon start`):
+```
+1. Check for existing daemon (abort if already running)
+2. Create PID file with current PID
+3. Bind Unix socket with 0600 permissions
+4. Load all registered repos into memory
+5. Start background sync timer (if configured)
+6. Write "ready" to stdout, daemonize
+```
+
+**Shutdown Sequence** (`el daemon stop` or SIGTERM):
+```
+1. Stop accepting new connections
+2. Wait for in-flight requests (max 5s)
+3. Flush pending writes to disk
+4. Remove socket file
+5. Remove PID file
+6. Exit 0
+```
+
+**Fallback Behavior**:
+- When daemon unavailable, CLI operates in direct mode with file locking
+- Warning printed: `el: warning: daemon unavailable, using direct mode (concurrent access may conflict)`
+- Direct mode safe for single-user; daemon recommended for multi-agent
+
+**Global Configuration** (`~/.eluent/config.yaml`):
+```yaml
+daemon:
+  auto_start: false        # Start daemon on first CLI command if not running
+  idle_shutdown: 3600      # Shutdown after N seconds idle (0 = never)
+  sync_interval: 300       # Background sync interval in seconds (0 = disabled)
+```
+
 ---
 
 ## Error Codes Reference
@@ -303,6 +535,109 @@ spec.add_dependency "httpx", "~> 1.3"
 | `ENCODING_ERROR` | 400 | Invalid UTF-8 or encoding issue |
 | `VALIDATION_ERROR` | 422 | Value fails validation (enum, pattern) |
 | `INTERNAL_ERROR` | 500 | Unexpected error |
+
+### Error Message Format
+
+**CLI output** (human-readable):
+```
+el: error: NOT_FOUND: Atom not found: eluent-xyz123
+hint: Run 'el list' to see available atoms
+```
+
+Format: `el: {level}: {code}: {message}` followed by optional `hint:` line.
+
+**`--robot` mode** (JSON):
+```json
+{
+  "status": "error",
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Atom not found: eluent-xyz123",
+    "details": {
+      "id": "eluent-xyz123",
+      "searched": ["data.jsonl", "ephemeral.jsonl"]
+    }
+  }
+}
+```
+
+**Exit Codes**:
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | General error (check stderr) |
+| 2 | Invalid arguments or usage |
+| 3 | Resource not found |
+| 4 | Conflict (cycle, duplicate, etc.) |
+| 5 | Storage/IO error |
+
+---
+
+## Logging Strategy
+
+**Log Levels** (in order of verbosity):
+| Level | Usage |
+|-------|-------|
+| `ERROR` | Operation failures, unrecoverable errors |
+| `WARN` | Recoverable issues, deprecations, fallback behavior |
+| `INFO` | High-level operation summaries (default for daemon) |
+| `DEBUG` | Detailed operation flow, config loading |
+| `TRACE` | Wire-level protocol messages, file I/O |
+
+**Environment Variables**:
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `EL_LOG_LEVEL` | Set log level | `EL_LOG_LEVEL=debug el list` |
+| `EL_DEBUG` | Shortcut for DEBUG level | `EL_DEBUG=1 el sync` |
+| `EL_TRACE` | Shortcut for TRACE level | `EL_TRACE=1 el daemon start` |
+
+**CLI Behavior**:
+- Default: Only `ERROR` and `WARN` to stderr
+- `--verbose` / `-v`: Add `INFO` level
+- `--debug`: Add `DEBUG` level
+- Environment variables override flags
+
+**Daemon Log Location**:
+- Default: `~/.eluent/daemon.log`
+- Rotation: 10MB max, keep 3 rotated files
+- Format: `2025-01-15T10:30:00Z [INFO] request_id=abc123 cmd=list duration_ms=12`
+
+**Debug Output Format**:
+```
+[DEBUG 10:30:00.123] storage: loading data.jsonl (1234 bytes)
+[DEBUG 10:30:00.125] storage: parsed 42 atoms, 15 bonds
+[DEBUG 10:30:00.126] index: rebuilt in 1ms
+```
+
+---
+
+## Protocol Versioning
+
+**Data Format Version**:
+- JSONL files include optional header line (first line, if present):
+  ```json
+  {"_version": 1, "_generator": "eluent/0.1.0", "_created_at": "2025-01-15T10:00:00Z"}
+  ```
+- Version omitted = version 1 (implicit)
+- Reader checks version; rejects if > supported version
+
+**Migration Strategy**:
+1. Detect version on load
+2. If older version: migrate in-place (idempotent)
+3. Before destructive migration: auto-backup to `.eluent/backups/data.jsonl.v1.bak`
+4. Migrations are forward-only; no downgrade support
+5. `el migrate` command for explicit migration with dry-run option
+
+**Daemon Protocol Version**:
+- Handshake includes version: `{"cmd": "hello", "protocol_version": 1}`
+- Server rejects incompatible clients with `PROTOCOL_MISMATCH` error
+- Protocol version independent of data format version
+
+**Version Compatibility Matrix**:
+| CLI Version | Data v1 | Data v2 | Daemon Protocol v1 |
+|-------------|---------|---------|-------------------|
+| 0.1.x | ✓ read/write | ✗ | ✓ |
+| 0.2.x | ✓ read/migrate | ✓ read/write | ✓ |
 
 ---
 
