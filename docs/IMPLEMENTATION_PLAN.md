@@ -143,7 +143,7 @@ Eluent
 ```yaml
 repo_name: eluent           # Repository identifier used in atom IDs
 defaults:
-  priority: 2               # Default priority for new atoms (1-5)
+  priority: 2               # Default priority for new atoms
   issue_type: task          # Default atom type
 ephemeral:
   cleanup_days: 7           # Auto-prune ephemeral items older than this
@@ -156,9 +156,9 @@ compaction:
 
 | Field | Type | Constraints | Default |
 |-------|------|-------------|---------|
-| `repo_name` | string | `^[a-z][a-z0-9_-]{0,31}$` (lowercase, 1-32 chars) | directory name |
-| `defaults.priority` | integer | 1-5 | 2 |
-| `defaults.issue_type` | string | registered type name | `task` |
+| `repo_name` | string | `^[a-z][a-z0-9_-]{0,31}$` (lowercase, 1-32 chars) | directory/git repo name |
+| `defaults.priority` | integer | N/A | 2 |
+| `defaults.issue_type` | string | N/A | `task` |
 | `ephemeral.cleanup_days` | integer | 1-365 | 7 |
 | `compaction.tier1_days` | integer | 1-365 | 30 |
 | `compaction.tier2_days` | integer | > tier1_days, ≤730 | 90 |
@@ -170,7 +170,7 @@ compaction:
 - Missing file: Create with defaults on first write operation
 
 ```
-el: warning: config.yaml: defaults.priority must be 1-5, got 10; using default (2)
+el: warning: config.yaml: defaults.cleanup_days must be 1-365, got 1000; using default (7)
 ```
 
 **ID Format**: `{repo_name}-{base62_random}.{child}.{grandchild}...`
@@ -230,7 +230,7 @@ Each line in `data.jsonl` is a JSON object with a `_type` discriminator field:
 {
   "_type": "comment",
   "id": "eluent-3kTm9vXpQ2z-c1",
-  "issue_id": "eluent-3kTm9vXpQ2z",
+  "parent_id": "eluent-3kTm9vXpQ2z",
   "author": "claude",
   "content": "Completed OAuth2 integration. PR #42 ready for review.",
   "created_at": "2025-01-15T11:30:00Z"
@@ -239,11 +239,23 @@ Each line in `data.jsonl` is a JSON object with a `_type` discriminator field:
 
 **Field Notes**:
 - `_type`: Discriminator for polymorphic deserialization (required)
-- `status`: One of `open`, `in_progress`, `blocked`, `deferred`, `closed`, `discard`; Extensible via plugins
-- `metadata`: Reserved for plugin-specific data; preserved during sync
+- `status`: Extensible via plugins; built-in types:
+    - `open`: Newly created or reopened
+    - `in_progress`: Actively being worked on
+    - `blocked`: Cannot proceed due to dependencies
+    - `deferred`: Postponed until later
+    - `closed`: Completed or resolved
+    - `discard`: Soft-deleted; recoverable
+- `issue_type`: Extensible via plugins; built-in types:
+    - `feature`: New functionality or enhancement
+    - `bug`: Defect or issue to fix
+    - `task`: Smaller action which furthers progress
+    - `artifact`: Documentation, design, or non-code deliverable
+    - `epic`: Large body of work, parent to multiple tasks/features
+    - `formula`: Template definition for creating multiple items
 - `priority`: Integer (0-5, 0 = highest priority)
 - `dependency_type`: See Dependency Types section for valid values
-- `issue_type`: Extensible via plugins; built-in types: `task`, `bug`, `feature`, `epic`, `chore`, `artifact`, `formula`
+- `metadata`: Reserved for plugin-specific data; preserved during sync
 
 ---
 
@@ -446,7 +458,9 @@ spec.add_development_dependency "rubocop-rspec", "~> 2.26"
 - `dry-*` ecosystem: Adds complexity; Ruby 4.0 provides sufficient built-in validation
 - `sequel`/`activerecord`: JSONL storage is simpler than ORM for append-only workloads
 - `concurrent-ruby`: Ruby 4.0's Ractor and improved threading sufficient for daemon
-- `oj`/`yajl`: stdlib `JSON` is fast enough; avoid native extension complexity
+
+**Future Considerations**:
+- `oj`/`yajl`: stdlib `JSON` may not be fast enough; but avoids native extension complexity
 
 ---
 
@@ -508,15 +522,14 @@ spec.add_development_dependency "rubocop-rspec", "~> 2.26"
 
 **Fallback Behavior**:
 - When daemon unavailable, CLI operates in direct mode with file locking
-- Warning printed: `el: warning: daemon unavailable, using direct mode (concurrent access may conflict)`
 - Direct mode safe for single-user; daemon recommended for multi-agent
 
 **Global Configuration** (`~/.eluent/config.yaml`):
 ```yaml
 daemon:
-  auto_start: false        # Start daemon on first CLI command if not running
+  auto_start: true         # Start daemon on first CLI command if not running, default: false
   idle_shutdown: 3600      # Shutdown after N seconds idle (0 = never)
-  sync_interval: 300       # Background sync interval in seconds (0 = disabled)
+  sync_interval: 300       # Background sync interval in seconds (0 = instant)
 ```
 
 ---
@@ -614,30 +627,22 @@ Format: `el: {level}: {code}: {message}` followed by optional `hint:` line.
 ## Protocol Versioning
 
 **Data Format Version**:
-- JSONL files include optional header line (first line, if present):
+- JSONL files include optional header atom:
   ```json
-  {"_version": 1, "_generator": "eluent/0.1.0", "_created_at": "2025-01-15T10:00:00Z"}
+  {"_type": "header", "repo_name": "eluent", "generator": "eluent/0.1.0", "created_at": "2025-01-15T10:00:00Z"}
   ```
-- Version omitted = version 1 (implicit)
 - Reader checks version; rejects if > supported version
 
 **Migration Strategy**:
 1. Detect version on load
 2. If older version: migrate in-place (idempotent)
-3. Before destructive migration: auto-backup to `.eluent/backups/data.jsonl.v1.bak`
+3. Before destructive migration: auto-backup to `.eluent/backups/data.jsonl.001.bak`
 4. Migrations are forward-only; no downgrade support
 5. `el migrate` command for explicit migration with dry-run option
 
 **Daemon Protocol Version**:
-- Handshake includes version: `{"cmd": "hello", "protocol_version": 1}`
+- Handshake includes version: `{"cmd": "hello", "protocol_version": "eluent/0.2.0"}`
 - Server rejects incompatible clients with `PROTOCOL_MISMATCH` error
-- Protocol version independent of data format version
-
-**Version Compatibility Matrix**:
-| CLI Version | Data v1 | Data v2 | Daemon Protocol v1 |
-|-------------|---------|---------|-------------------|
-| 0.1.x | ✓ read/write | ✗ | ✓ |
-| 0.2.x | ✓ read/migrate | ✓ read/write | ✓ |
 
 ---
 
@@ -701,7 +706,7 @@ Work items can be created in two phases:
 **Usage**:
 ```bash
 el create --ephemeral --title "Debug session"
-el formula instantiate release-checks --ephemeral
+el formula instantiate release-checks
 ```
 
 **Cleanup**: Ephemeral items older than the configured duration are automatically pruned on any `el` command execution. Manual cleanup: `el discard prune --ephemeral`.
@@ -772,6 +777,14 @@ Eluent::Plugins.register "my_plugin" do
   register_dependency_type :custom_dep,
     blocking: false,  # false by default, true affects readiness
     description: "Custom relationship description"
+
+  register_atom_type :custom_atom,
+    fields: {
+      custom_value: {
+        type: String,
+        default: "default_value"
+      }
+    }
 end
 ```
 
