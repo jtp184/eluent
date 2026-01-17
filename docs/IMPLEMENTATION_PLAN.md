@@ -173,20 +173,119 @@ compaction:
 el: warning: config.yaml: defaults.cleanup_days must be 1-365, got 1000; using default (7)
 ```
 
-**ID Format**: `{repo_name}-{base62_random}.{child}.{grandchild}...`
+**ID Format**: `{repo_name}-{ulid}.{child}.{grandchild}...`
 
-ID generation requirements:
-- **Source**: Cryptographically secure random bytes (64 bits minimum)
-- **Encoding**: Base62 (a-zA-Z0-9) for URL-safe, compact identifiers
-- **Length**: ~11 characters for 64-bit entropy
+ID generation uses ULIDs (Universally Unique Lexicographically Sortable Identifiers):
+- **Encoding**: Crockford Base32 (0-9, A-Z excluding I, L, O, U)
+- **Length**: 26 characters (128-bit total: 48-bit timestamp + 80-bit random)
+- **Structure**:
+  ```
+  01ARZ3NDEKTSV4RRFFQ69G5FAV
+  └────┬────┘└──────┬───────┘
+    timestamp    randomness
+    (10 chars)   (16 chars)
+  ```
+- **Benefits**: Lexicographically sortable by creation time, higher entropy (80-bit random)
 - **Child IDs**: Arbitrary strings appended with `.` delimiter; must be unique within parent scope
 
 **Examples**:
-- `eluent-3kTm9vXpQ2z` — Root atom
-- `eluent-3kTm9vXpQ2z.1` — First child (numeric)
-- `eluent-3kTm9vXpQ2z.1.3` — Third grandchild of first child
-- `eluent-3kTm9vXpQ2z.docs` — Child using semantic name
-- `eluent-3kTm9vXpQ2z.docs.guide` — Nested semantic naming
+- `eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV` — Root atom
+- `eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV.1` — First child (numeric)
+- `eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV.1.3` — Third grandchild of first child
+- `eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV.docs` — Child using semantic name
+- `eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV.docs.guide` — Nested semantic naming
+
+### ID Shortening
+
+For convenience, atoms can be referenced by a shortened ID that matches against the **randomness portion** (last 16 characters) of the ULID:
+
+**Shortening rules**:
+- Match against the randomness portion only (not the timestamp)
+- Minimum 4 characters required for lookup
+- Case-insensitive matching (per Crockford Base32 spec)
+- Confusable character normalization: I,L→1, O→0
+
+**Resolution examples**:
+```bash
+el show eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV   # Full ID
+el show TSV4                                 # Short (matches randomness portion)
+el show eluent-TSV4                          # Repo + short randomness
+el show .1                                   # Relative child reference
+```
+
+**Display in listings** (shows minimum unique prefix from randomness):
+```
+ID       Title                        Status
+-------- ---------------------------- --------
+TSV4     Implement authentication     open
+Q69G     Fix login bug                closed
+RRFF     Add OAuth provider           in_progress
+```
+
+**Show view** (displays full ID + short reference):
+```
+Full ID: eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV
+         └────┬────┘└──────┬───────┘
+         timestamp   randomness
+Short:   TSV4 (use 'el show TSV4')
+```
+
+**Verbose/debug view** (shows both portions):
+```
+Full:      eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV
+Timestamp: 01ARZ3NDEK (2025-01-15T10:30:00Z)
+Random:    TSV4RRFFQ69G5FAV
+Short:     TSV4
+```
+
+### ID Disambiguation
+
+When multiple items match a short ID:
+
+**Interactive mode** — prompt user to select:
+```
+? Multiple items match "TSV4". Select one:
+  ❯ [TSV4RR] Implement authentication (open)
+    [TSV4Q6] Fix login bug (closed)
+    [TSV4AB] Add OAuth provider (in_progress)
+```
+
+**Non-interactive (`--robot`)** — return structured error:
+```json
+{
+  "status": "error",
+  "error": {
+    "code": "AMBIGUOUS_ID",
+    "message": "Ambiguous ID 'TSV4' matches 3 items",
+    "details": {
+      "candidates": [...],
+      "minimum_unique_prefixes": {"eluent-01ARZ...TSV4RRFF...": "TSV4RR", ...}
+    }
+  }
+}
+```
+
+**Resolution Algorithm**:
+```
+Input: "TSV4"
+
+1. Check if input is full ID (26 chars after repo prefix) → exact lookup
+2. Otherwise, treat as randomness prefix
+3. Query randomness trie for prefix matches
+4. If 1 match → return
+5. If 0 matches → NOT_FOUND error
+6. If >1 matches → AMBIGUOUS_ID (prompt in interactive, error in robot mode)
+```
+
+**Internal Index Structure**:
+```ruby
+@exact_index = { "eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV" => atom }
+@randomness_trie = PrefixTrie.new  # indexed by "TSV4RRFFQ69G5FAV"
+```
+- **Exact index**: Hash map for O(1) full ID lookup
+- **Randomness prefix trie**: Per-repo trie indexed by last 16 chars of ULID
+- Supports efficient prefix matching on the unique portion
+- Memory estimate: ~60MB for 100,000 atoms
 
 ### JSONL Record Formats
 
@@ -196,7 +295,7 @@ Each line in `data.jsonl` is a JSON object with a `_type` discriminator field:
 ```json
 {
   "_type": "atom",
-  "id": "eluent-3kTm9vXpQ2z",
+  "id": "eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "title": "Implement user authentication",
   "description": "Add OAuth2 login flow with Google and GitHub providers",
   "status": "open",
@@ -217,8 +316,8 @@ Each line in `data.jsonl` is a JSON object with a `_type` discriminator field:
 ```json
 {
   "_type": "bond",
-  "source_id": "eluent-3kTm9vXpQ2z.2",
-  "target_id": "eluent-3kTm9vXpQ2z.1",
+  "source_id": "eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV.2",
+  "target_id": "eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV.1",
   "dependency_type": "blocks",
   "created_at": "2025-01-15T10:05:00Z",
   "metadata": {}
@@ -229,8 +328,8 @@ Each line in `data.jsonl` is a JSON object with a `_type` discriminator field:
 ```json
 {
   "_type": "comment",
-  "id": "eluent-3kTm9vXpQ2z-c1",
-  "parent_id": "eluent-3kTm9vXpQ2z",
+  "id": "eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV-c1",
+  "parent_id": "eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV",
   "author": "claude",
   "content": "Completed OAuth2 integration. PR #42 ready for review.",
   "created_at": "2025-01-15T11:30:00Z"
@@ -340,10 +439,12 @@ el discard prune --ephemeral  # Permanently delete discarded ephemeral items
 | `lib/eluent/models/bond.rb` | Bond entity with all dependency types |
 | `lib/eluent/models/comment.rb` | Append-only discussion |
 | `lib/eluent/storage/jsonl_repository.rb` | JSONL persistence with locking |
-| `lib/eluent/storage/indexer.rb` | In-memory index for fast lookups |
+| `lib/eluent/storage/indexer.rb` | Dual-index: exact hash + randomness prefix trie |
 | `lib/eluent/storage/serializers/atom_serializer.rb` | Atom JSON serialization |
 | `lib/eluent/storage/serializers/bond_serializer.rb` | Bond JSON serialization |
-| `lib/eluent/registry/id_generator.rb` | Repo-aware Base62-encoded 64-bit random ID generation |
+| `lib/eluent/registry/id_generator.rb` | ULID generation (Crockford Base32) |
+| `lib/eluent/registry/id_resolver.rb` | Shortening, normalization, disambiguation |
+| `lib/eluent/storage/prefix_trie.rb` | Prefix matching index structure |
 | `lib/eluent/cli/application.rb` | Main CLI entry point |
 | `lib/eluent/cli/commands/init.rb` | Initialize .eluent/ |
 | `lib/eluent/cli/commands/create.rb` | Create work items |
@@ -540,6 +641,7 @@ daemon:
 |------|------------|-------------|
 | `NOT_FOUND` | 404 | Item/resource does not exist |
 | `INVALID_REQUEST` | 400 | Malformed request or invalid parameters |
+| `AMBIGUOUS_ID` | 400 | Short ID matches multiple items |
 | `CONFLICT` | 409 | Operation conflicts with current state |
 | `CYCLE_DETECTED` | 422 | Dependency would create cycle |
 | `SELF_REFERENCE` | 422 | Item cannot depend on itself |
@@ -853,6 +955,14 @@ end
 17. **Comment deduplication**: Same comment from two sources → single entry
 18. **Daemon stale socket cleanup**: Old socket file → removed and recreated
 19. **Unicode edge cases**: Emoji in titles, RTL text, combining characters
+20. **ULID format compliance**: 26 chars, Crockford Base32, first char 0-7
+21. **Randomness-based prefix matching**: Matches against last 16 chars only
+22. **Minimum 4 characters for lookup**: Reject 1-3 char prefixes
+23. **Disambiguation prompt in interactive mode**: Multiple matches → user selection
+24. **Structured AMBIGUOUS_ID error in robot mode**: JSON error with candidates
+25. **Confusable character normalization**: I→1, L→1, O→0 input handling
+26. **Timestamp ordering**: Newer ULIDs sort lexicographically higher
+27. **Full ID lookup bypasses prefix matching**: 26-char input → direct exact lookup
 
 ### Edge Cases and Error Handling
 
@@ -999,19 +1109,34 @@ end
 
 **Child ID Uniqueness Scope**
 - Child IDs unique within parent scope only (not globally)
-- Example: `eluent-abc.1` and `eluent-xyz.1` can both exist
+- Example: `eluent-01ARZ3NDEKTSV4RRFFQ69G5FAV.1` and `eluent-01BRZ3NDEKTSV4RRFFQ69G5FAV.1` can both exist
 - Full ID (including parent prefix) is globally unique
 
 **Collision Detection and Recovery**
 - On ID generation, check existence before write
-- If collision detected (astronomically unlikely with 64-bit entropy): Generate new ID
+- If collision detected (astronomically unlikely with 80-bit randomness): Generate new ID
 - Log collision event for monitoring
 - Statistical test: 10M IDs must have 0 collisions (implementation verification)
 
 **ID Format Validation**
-- Regex: `^[a-zA-Z0-9_-]+-[a-zA-Z0-9]{8,}(\.[a-zA-Z0-9_-]+)*$`
+- Full ID regex:
+  ```ruby
+  # Full ID: repo_name + hyphen + ULID (first char 0-7) + optional children
+  /\A(?<repo>[a-z][a-z0-9_-]{0,31})-(?<ulid>[0-7][0-9A-HJKMNP-TV-Z]{25})(?:\.(?<children>[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*))?\z/i
+  ```
+- ULID first character must be 0-7 (prevents overflow past year 10889)
+- Crockford Base32 charset: 0-9, A-H, J-K, M-N, P, R-T, V-Z (excludes I, L, O, U)
 - Reject IDs not matching format on import/create
 - Cross-repo IDs: Must include repo prefix
+
+**ID Shortening Edge Cases**
+- **Minimum prefix validation**: Reject < 4 character randomness prefixes
+- **Confusable normalization**: Handle I,L,O,U → 1,1,0,V (per Crockford spec)
+- **Invalid ULID characters**: Graceful error with valid character hint
+- **ULID range validation**: First character must be 0-7
+- **Timestamp vs randomness parsing**: Correctly split 26-char ULID into 10+16
+- **Full ID vs short ID detection**: Detect if input is full ULID or randomness prefix
+- **Ambiguous prefix resolution**: Interactive prompt vs structured error in robot mode
 
 #### Compaction Edge Cases
 
