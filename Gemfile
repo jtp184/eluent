@@ -24,3 +24,6 @@ gem 'steep', '~> 1.6'
 gem 'rubocop', '~> 1.60'
 gem 'rubocop-rake', '~> 0.7.1', require: false
 gem 'rubocop-rspec', '~> 3.9', require: false
+
+# Code coverage
+gem 'simplecov', '~> 0.22', require: false

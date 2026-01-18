@@ -38,3 +38,6 @@
     - Handle special cases with a guard clause
   - Handling errors
     - Prefer top-level `rescue` clauses for error handling.
+
+## Git & Github
+- Use the `pull_request_template.md` template for PR descriptions. Fill out all sections.

@@ -8,9 +8,9 @@ on:
   pull_request:
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
-    name: Ruby ${{ matrix.ruby }}
+    name: Tests (Ruby ${{ matrix.ruby }})
     strategy:
       matrix:
         ruby:
@@ -27,5 +27,45 @@ jobs:
           bundler-cache: true
       - name: Run RSpec tests
         run: bundle exec rspec
+
+  coverage:
+    runs-on: ubuntu-latest
+    name: Coverage (Ruby ${{ matrix.ruby }})
+    strategy:
+      matrix:
+        ruby:
+          - '4.0.1'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - name: Run RSpec with coverage
+        run: bundle exec rspec
+        env:
+          COVERAGE: '1'
+
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint (Ruby ${{ matrix.ruby }})
+    strategy:
+      matrix:
+        ruby:
+          - '4.0.1'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
       - name: Run RuboCop
         run: bundle exec rubocop

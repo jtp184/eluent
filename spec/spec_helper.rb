@@ -1,5 +1,14 @@
 # frozen_string_literal: true
 
+if ENV['COVERAGE']
+  require 'simplecov'
+  SimpleCov.start do
+    coverage_dir 'coverage'
+    add_filter '/spec/'
+    minimum_coverage 80
+  end
+end
+
 $VERBOSE = nil
 
 require 'eluent'

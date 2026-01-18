@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'set'
 require_relative 'prefix_trie'
 require_relative '../registry/id_generator'
 
