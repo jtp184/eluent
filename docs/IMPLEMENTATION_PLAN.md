@@ -435,17 +435,29 @@ el discard prune --ephemeral  # Permanently delete discarded ephemeral items
 ### Phase 1: Foundation
 | File | Purpose |
 |------|---------|
+| `lib/eluent/version.rb` | Gem version constant |
 | `lib/eluent/models/atom.rb` | Core Atom entity with all fields |
 | `lib/eluent/models/bond.rb` | Bond entity with all dependency types |
 | `lib/eluent/models/comment.rb` | Append-only discussion |
+| `lib/eluent/models/status.rb` | Status enum (open, in_progress, blocked, deferred, closed, discard) |
+| `lib/eluent/models/issue_type.rb` | Issue type enum (feature, bug, task, artifact, epic, formula) |
+| `lib/eluent/models/dependency_type.rb` | Dependency type definitions with blocking semantics |
+| `lib/eluent/models/mixins/extendable_collection.rb` | Mixin for plugin-extensible enumerations |
+| `lib/eluent/models/mixins/validations.rb` | Shared validation logic for models |
 | `lib/eluent/storage/jsonl_repository.rb` | JSONL persistence with locking |
 | `lib/eluent/storage/indexer.rb` | Dual-index: exact hash + randomness prefix trie |
+| `lib/eluent/storage/prefix_trie.rb` | Prefix matching index structure |
+| `lib/eluent/storage/paths.rb` | Path resolution for .eluent/ directory |
+| `lib/eluent/storage/file_operations.rb` | File I/O with locking and atomic writes |
+| `lib/eluent/storage/config_loader.rb` | config.yaml loading and validation |
+| `lib/eluent/storage/serializers/base.rb` | Base serializer with type dispatch |
 | `lib/eluent/storage/serializers/atom_serializer.rb` | Atom JSON serialization |
 | `lib/eluent/storage/serializers/bond_serializer.rb` | Bond JSON serialization |
+| `lib/eluent/storage/serializers/comment_serializer.rb` | Comment JSON serialization |
 | `lib/eluent/registry/id_generator.rb` | ULID generation (Crockford Base32) |
 | `lib/eluent/registry/id_resolver.rb` | Shortening, normalization, disambiguation |
-| `lib/eluent/storage/prefix_trie.rb` | Prefix matching index structure |
 | `lib/eluent/cli/application.rb` | Main CLI entry point |
+| `lib/eluent/cli/formatting.rb` | Output formatting helpers (tables, colors) |
 | `lib/eluent/cli/commands/init.rb` | Initialize .eluent/ |
 | `lib/eluent/cli/commands/create.rb` | Create work items |
 | `lib/eluent/cli/commands/list.rb` | List with filters |
@@ -462,7 +474,6 @@ el discard prune --ephemeral  # Permanently delete discarded ephemeral items
 | `lib/eluent/graph/dependency_graph.rb` | DAG structure |
 | `lib/eluent/graph/cycle_detector.rb` | Prevent cycles |
 | `lib/eluent/graph/blocking_resolver.rb` | Transitive blocking for all dep types |
-| `lib/eluent/lifecycle/status.rb` | Status enum (open, in_progress, blocked, deferred, closed, discard) |
 | `lib/eluent/lifecycle/transition.rb` | State machine |
 | `lib/eluent/lifecycle/readiness_calculator.rb` | Ready work query with type exclusions |
 | `lib/eluent/cli/commands/ready.rb` | Show ready items with sort policies |
@@ -871,10 +882,13 @@ Eluent::Plugins.register "my_plugin" do
     # ctx.output - output formatter
   end
 
-  # Type registration
+  # Extension registration
   register_issue_type :custom_type,
-    required_fields: [:custom_field],
-    abstract: true  # Abstract types (e.g., epic, molecule) are containers—excluded from `el ready`
+    abstract: true  # Abstract types (e.g., epic, formula) are containers—excluded from `el ready`
+
+  register_status_type :custom_status,
+    from: %i[open in_progress], # Allowed transitions, default / [] means any
+    to: %i[closed discard]
 
   register_dependency_type :custom_dep,
     blocking: false,  # false by default, true affects readiness
@@ -882,9 +896,11 @@ Eluent::Plugins.register "my_plugin" do
 
   register_atom_type :custom_atom,
     fields: {
-      custom_value: {
+      custom_field: {
         type: String,
-        default: "default_value"
+        default: "default_value",
+        required: true,
+        validate: -> { |value| value.length <= 100}
       }
     }
 end

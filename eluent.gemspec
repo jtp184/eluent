@@ -30,9 +30,15 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ['lib']
 
-  # Uncomment to register a new dependency of your gem
-  # spec.add_dependency "example-gem", "~> 1.0"
+  # CLI interaction
+  spec.add_dependency 'pastel', '~> 0.8'
+  spec.add_dependency 'tty-box', '~> 0.7'
+  spec.add_dependency 'tty-option', '~> 0.3'
+  spec.add_dependency 'tty-prompt', '~> 0.23'
+  spec.add_dependency 'tty-spinner', '~> 0.9'
+  spec.add_dependency 'tty-table', '~> 0.12'
+  spec.add_dependency 'tty-tree', '~> 0.4'
 
-  # For more information and examples about making a new gem, check out our
-  # guide at: https://bundler.io/guides/creating_gem.html
+  # HTTP for AI integrations
+  spec.add_dependency 'httpx', '~> 1.3'
 end

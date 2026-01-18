@@ -1,6 +1,21 @@
 # frozen_string_literal: true
 
+if ENV['COVERAGE']
+  require 'simplecov'
+  SimpleCov.start do
+    coverage_dir 'coverage'
+    add_filter '/spec/'
+    minimum_coverage 80
+  end
+end
+
+$VERBOSE = nil
+
 require 'eluent'
+require 'webmock/rspec'
+
+# Load support files
+Dir[File.join(__dir__, 'support', '**', '*.rb')].each { |f| require f }
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
@@ -12,4 +27,16 @@ RSpec.configure do |config|
   config.expect_with :rspec do |c|
     c.syntax = :expect
   end
+
+  # Run specs in random order for better isolation
+  config.order = :random
+
+  # Seed global randomization to allow reproduction of test order
+  Kernel.srand config.seed
+
+  # Filter examples by focus tags
+  config.filter_run_when_matching :focus
+
+  # Disable real HTTP connections
+  WebMock.disable_net_connect!(allow_localhost: true)
 end
