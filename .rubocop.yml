@@ -1,6 +1,75 @@
 plugins:
+  - rubocop-factory_bot
   - rubocop-rake
   - rubocop-rspec
 AllCops:
   TargetRubyVersion: 4.0
   NewCops: enable
+
+Metrics/BlockLength:
+  AllowedMethods:
+    - describe
+    - context
+    - feature
+    - scenario
+    - it
+    - before
+    - after
+
+Metrics/ClassLength:
+  Max: 250
+
+Metrics/MethodLength:
+  Max: 30
+  AllowedMethods:
+    - initialize
+    - included
+
+Metrics/AbcSize:
+  Max: 40
+  AllowedMethods:
+    - initialize
+    - included
+
+Metrics/CyclomaticComplexity:
+  Max: 15
+  AllowedMethods:
+    - included
+
+Metrics/PerceivedComplexity:
+  Max: 15
+  AllowedMethods:
+    - included
+
+Metrics/ParameterLists:
+  Max: 20
+
+RSpec/ExpectActual:
+  Enabled: false
+
+Naming/AccessorMethodName:
+  Enabled: false
+
+Naming/PredicateMethod:
+  Enabled: false
+
+RSpec/MultipleExpectations:
+  Max: 8
+
+RSpec/MultipleMemoizedHelpers:
+  Max: 10
+
+RSpec/ExampleLength:
+  Max: 15
+
+RSpec/SpecFilePathFormat:
+  Enabled: false
+
+RSpec/MultipleDescribes:
+  Enabled: false
+
+RSpec/IndexedLet:
+  Enabled: false
+
+RSpec/ContextWording:
+  Enabled: false

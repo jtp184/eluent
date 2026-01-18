@@ -1,3 +1,4 @@
 --format documentation
 --color
 --require spec_helper
+--format documentation --out rspec_output.txt

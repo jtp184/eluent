@@ -2,3 +2,6 @@
 # frozen_string_literal: true
 
 require 'eluent'
+require 'eluent/cli/application'
+
+exit Eluent::CLI::Application.new(ARGV).run
