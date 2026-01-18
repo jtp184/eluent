@@ -140,6 +140,19 @@ module Eluent
                .sort_by(&:created_at)
       end
 
+      def delete_atom(atom)
+        ensure_loaded!
+
+        target_file = file_containing_atom(atom.id)
+
+        FileOperations.rewrite_file(target_file) do |records|
+          records.reject { |record| record[:_type] == 'atom' && record[:id] == atom.id }
+        end
+
+        indexer.remove_atom(atom)
+        true
+      end
+
       # --- Bond Operations ---
 
       def create_bond(source_id:, target_id:, dependency_type: 'blocks')

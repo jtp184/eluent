@@ -10,7 +10,7 @@ module Eluent
     class Application
       include TTY::Option
 
-      COMMANDS = %w[init create list show update close reopen config].freeze
+      COMMANDS = %w[init create list show update close reopen config ready dep comment discard].freeze
 
       ERROR_CODES = {
         Storage::RepositoryNotFoundError => 'REPO_NOT_FOUND',
@@ -18,13 +18,15 @@ module Eluent
         Registry::AmbiguousIdError => 'AMBIGUOUS_ID',
         Registry::IdNotFoundError => 'NOT_FOUND',
         Models::ValidationError => 'VALIDATION_ERROR',
-        Models::SelfReferenceError => 'SELF_REFERENCE'
+        Models::SelfReferenceError => 'SELF_REFERENCE',
+        Graph::CycleDetectedError => 'CYCLE_DETECTED',
+        Lifecycle::InvalidTransitionError => 'INVALID_TRANSITION'
       }.freeze
 
       EXIT_CODES = {
         'REPO_NOT_FOUND' => 3, 'NOT_FOUND' => 3,
-        'REPO_EXISTS' => 4, 'AMBIGUOUS_ID' => 4, 'SELF_REFERENCE' => 4,
-        'VALIDATION_ERROR' => 2
+        'REPO_EXISTS' => 4, 'AMBIGUOUS_ID' => 4, 'SELF_REFERENCE' => 4, 'CYCLE_DETECTED' => 4,
+        'VALIDATION_ERROR' => 2, 'INVALID_TRANSITION' => 2
       }.freeze
 
       usage do

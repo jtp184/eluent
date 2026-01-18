@@ -1,6 +1,6 @@
 # Eluent Implementation Progress
 
-**Last Updated**: 2026-01-17
+**Last Updated**: 2026-01-18
 
 This document tracks progress towards completing the implementation plan defined in `IMPLEMENTATION_PLAN.md`.
 
@@ -11,7 +11,7 @@ This document tracks progress towards completing the implementation plan defined
 | Phase | Status | Progress |
 |-------|--------|----------|
 | Phase 1: Foundation | Complete | 100% |
-| Phase 2: Graph Operations | Not Started | 0% |
+| Phase 2: Graph Operations | Complete | 100% |
 | Phase 3: Sync and Daemon | Not Started | 0% |
 | Phase 4: Formulas and Compaction | Not Started | 0% |
 | Phase 5: Extensions and AI | Not Started | 0% |
@@ -87,21 +87,35 @@ Dependencies, blocking, ready work
 
 ### Graph
 
-- [ ] `lib/eluent/graph/dependency_graph.rb` — DAG structure
-- [ ] `lib/eluent/graph/cycle_detector.rb` — Prevent cycles
-- [ ] `lib/eluent/graph/blocking_resolver.rb` — Transitive blocking for all dep types
+- [x] `lib/eluent/graph/dependency_graph.rb` — DAG traversal (path_exists?, all_descendants, all_ancestors, direct_blockers, direct_dependents)
+- [x] `lib/eluent/graph/cycle_detector.rb` — Pre-creation validation with cycle path return for debugging
+- [x] `lib/eluent/graph/blocking_resolver.rb` — Transitive blocking for all 4 types (blocks, parent_child, conditional_blocks, waits_for)
 
 ### Lifecycle
 
-- [ ] `lib/eluent/lifecycle/transition.rb` — State machine
-- [ ] `lib/eluent/lifecycle/readiness_calculator.rb` — Ready work query with type exclusions
+- [x] `lib/eluent/lifecycle/transition.rb` — Status state machine with allowed transitions
+- [x] `lib/eluent/lifecycle/readiness_calculator.rb` — Ready work query with sort policies (priority, oldest, hybrid)
 
 ### CLI Commands (Phase 2)
 
-- [ ] `lib/eluent/cli/commands/ready.rb` — Show ready items with sort policies
-- [ ] `lib/eluent/cli/commands/dep.rb` — Dependency management (add/remove/list/tree/check)
-- [ ] `lib/eluent/cli/commands/comment.rb` — Comment add/list management
-- [ ] `lib/eluent/cli/commands/discard.rb` — Soft deletion (list/restore/prune)
+- [x] `lib/eluent/cli/commands/ready.rb` — Show ready items with filtering and sorting
+- [x] `lib/eluent/cli/commands/dep.rb` — Dependency management (add/remove/list/tree/check) with cycle detection
+- [x] `lib/eluent/cli/commands/comment.rb` — Comment add/list management
+- [x] `lib/eluent/cli/commands/discard.rb` — Soft deletion (list/restore/prune)
+
+### Integration
+
+- [x] Updated `lib/eluent/storage/jsonl_repository.rb` — Added delete_atom method
+- [x] Updated `lib/eluent/cli/application.rb` — Added new commands and error codes
+- [x] Updated `lib/eluent.rb` — Added requires for graph and lifecycle modules
+
+### Specs
+
+- [x] `spec/eluent/graph/dependency_graph_spec.rb` — 24 examples
+- [x] `spec/eluent/graph/cycle_detector_spec.rb` — 12 examples
+- [x] `spec/eluent/graph/blocking_resolver_spec.rb` — 24 examples
+- [x] `spec/eluent/lifecycle/transition_spec.rb` — 19 examples
+- [x] `spec/eluent/lifecycle/readiness_calculator_spec.rb` — 18 examples
 
 ---
 

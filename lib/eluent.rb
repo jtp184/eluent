@@ -33,3 +33,12 @@ require_relative 'eluent/storage/jsonl_repository'
 # Registry
 require_relative 'eluent/registry/id_generator'
 require_relative 'eluent/registry/id_resolver'
+
+# Graph
+require_relative 'eluent/graph/dependency_graph'
+require_relative 'eluent/graph/cycle_detector'
+require_relative 'eluent/graph/blocking_resolver'
+
+# Lifecycle
+require_relative 'eluent/lifecycle/transition'
+require_relative 'eluent/lifecycle/readiness_calculator'
