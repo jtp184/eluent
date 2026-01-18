@@ -4,6 +4,9 @@ require 'time'
 
 module Eluent
   module Models
+    class ValidationError < Error; end
+    class SelfReferenceError < Error; end
+
     # Validators for fields
     module Validations
       TITLE_MAX_LENGTH = 500
@@ -78,7 +81,7 @@ module Eluent
       def validate_not_self_reference(source_id:, target_id:)
         return unless source_id && target_id && source_id == target_id
 
-        raise ValidationError, "cannot depend on itself: #{source_id}/#{target_id}"
+        raise SelfReferenceError, "cannot depend on itself: #{source_id}"
       end
 
       def validate_dependency_type(type)
@@ -89,7 +92,6 @@ module Eluent
         end
       end
 
-      class ValidationError < Error; end
     end
   end
 end

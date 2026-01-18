@@ -27,6 +27,7 @@ require_relative 'eluent/storage/prefix_trie'
 require_relative 'eluent/storage/indexer'
 require_relative 'eluent/storage/serializers/atom_serializer'
 require_relative 'eluent/storage/serializers/bond_serializer'
+require_relative 'eluent/storage/serializers/comment_serializer'
 require_relative 'eluent/storage/jsonl_repository'
 
 # Registry
