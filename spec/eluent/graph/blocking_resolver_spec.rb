@@ -169,6 +169,23 @@ RSpec.describe Eluent::Graph::BlockingResolver do
           expect(result[:blocked]).to be false
         end
       end
+
+      context 'with nested parent chain (grandparent -> parent -> child)' do
+        let(:grandparent_atom) { build(:atom, :open) }
+        let(:parent_atom) { build(:atom, :closed, parent_id: grandparent_atom.id) }
+        let(:child_atom) { build(:atom, :open, parent_id: parent_atom.id) }
+
+        before do
+          indexer.index_atom(grandparent_atom)
+          indexer.index_atom(parent_atom)
+          indexer.index_atom(child_atom)
+        end
+
+        it 'does not block child when parent is closed (even if grandparent is open)' do
+          result = resolver.blocked?(child_atom)
+          expect(result[:blocked]).to be false
+        end
+      end
     end
 
     it 'caches results' do
@@ -195,8 +212,12 @@ RSpec.describe Eluent::Graph::BlockingResolver do
 
       before { indexer.index_atom(epic_atom) }
 
-      it 'returns false' do
+      it 'returns false by default' do
         expect(resolver.ready?(epic_atom)).to be false
+      end
+
+      it 'returns true when include_abstract is true' do
+        expect(resolver.ready?(epic_atom, include_abstract: true)).to be true
       end
     end
 

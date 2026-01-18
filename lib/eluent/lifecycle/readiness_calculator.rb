@@ -45,11 +45,7 @@ module Eluent
       attr_reader :indexer, :blocking_resolver
 
       def ready_for_work?(atom, include_abstract:)
-        return false if atom.closed? || atom.discard?
-        return false if atom.abstract? && !include_abstract
-        return false if atom.defer_future?
-
-        !blocking_resolver.blocked?(atom)[:blocked]
+        blocking_resolver.ready?(atom, include_abstract: include_abstract)
       end
 
       def matches_filters?(atom, type:, exclude_types:, assignee:, labels:, priority:)

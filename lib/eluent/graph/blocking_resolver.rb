@@ -51,9 +51,9 @@ module Eluent
       end
 
       # Combines blocking check with abstract and defer_until checks
-      def ready?(atom)
+      def ready?(atom, include_abstract: false)
         return false if atom.nil?
-        return false if atom.abstract?
+        return false if atom.abstract? && !include_abstract
         return false if atom.closed? || atom.discard?
         return false if atom.defer_future?
         return false if blocked?(atom)[:blocked]
@@ -117,9 +117,9 @@ module Eluent
         return false if parent.closed?
         return true unless parent.parent_id
 
-        # If parent is not closed, check if its parent blocks it
+        # Parent is open, so check if grandparent also blocks
         grandparent = indexer.find_by_id(parent.parent_id)
-        !parent.closed? || (grandparent && blocking_parent?(grandparent))
+        grandparent.nil? || blocking_parent?(grandparent)
       end
 
     end
