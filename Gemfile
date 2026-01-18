@@ -22,6 +22,7 @@ gem 'steep', '~> 1.6'
 
 # Code quality
 gem 'rubocop', '~> 1.60'
+gem 'rubocop-factory_bot', '~> 2.26', require: false
 gem 'rubocop-rake', '~> 0.7.1', require: false
 gem 'rubocop-rspec', '~> 3.9', require: false
 
