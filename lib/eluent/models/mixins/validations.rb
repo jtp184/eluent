@@ -91,7 +91,6 @@ module Eluent
           raise ValidationError, "invalid dependency_type: #{type}"
         end
       end
-
     end
   end
 end

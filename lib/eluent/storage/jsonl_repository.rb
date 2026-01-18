@@ -80,14 +80,13 @@ module Eluent
       def create_atom(attrs = {})
         ensure_loaded!
 
-        atom = build_atom(attrs)
+        atom = build_atom(attrs.except(:ephemeral))
         atom = regenerate_id_if_collision(atom, attrs)
 
-        ephemeral = attrs.delete(:ephemeral)
-        target_file = ephemeral ? paths.ephemeral_file : paths.data_file
+        target_file = attrs[:ephemeral] ? paths.ephemeral_file : paths.data_file
 
         FileOperations.append_record(target_file, Serializers::AtomSerializer.serialize(atom))
-        @indexer.index_atom(atom)
+        indexer.index_atom(atom)
         atom
       end
 
@@ -103,14 +102,14 @@ module Eluent
           end
         end
 
-        @indexer.remove_atom(@indexer.find_by_id(atom.id))
-        @indexer.index_atom(atom)
+        indexer.remove_atom(indexer.find_by_id(atom.id))
+        indexer.index_atom(atom)
         atom
       end
 
       def find_atom(id)
         ensure_loaded!
-        result = @id_resolver.resolve(id, repo_name: repo_name)
+        result = id_resolver.resolve(id, repo_name: repo_name)
 
         case result[:error]
         when nil then result[:atom]
@@ -121,18 +120,18 @@ module Eluent
 
       def find_atom_by_id(id)
         ensure_loaded!
-        @indexer.find_by_id(id)
+        indexer.find_by_id(id)
       end
 
       def all_atoms
         ensure_loaded!
-        @indexer.all_atoms
+        indexer.all_atoms
       end
 
       def list_atoms(status: nil, issue_type: nil, assignee: nil, labels: nil, include_discarded: false)
         ensure_loaded!
 
-        @indexer.all_atoms
+        indexer.all_atoms
                 .then { |atoms| include_discarded ? atoms : atoms.reject(&:discard?) }
                 .then { |atoms| status ? atoms.select { |a| a.status == status } : atoms }
                 .then { |atoms| issue_type ? atoms.select { |a| a.issue_type == issue_type } : atoms }
@@ -148,18 +147,18 @@ module Eluent
 
         bond = Models::Bond.new(source_id: source_id, target_id: target_id, dependency_type: dependency_type)
 
-        existing = @indexer.bonds_from(source_id).find { |b| b == bond }
+        existing = indexer.bonds_from(source_id).find { |b| b == bond }
         return existing if existing
 
         FileOperations.append_record(paths.data_file, Serializers::BondSerializer.serialize(bond))
-        @indexer.index_bond(bond)
+        indexer.index_bond(bond)
         bond
       end
 
       def remove_bond(source_id:, target_id:, dependency_type:)
         ensure_loaded!
 
-        bond = @indexer.bonds_from(source_id).find do |b|
+        bond = indexer.bonds_from(source_id).find do |b|
           b.target_id == target_id && b.dependency_type == dependency_type
         end
         return false unless bond
@@ -173,13 +172,13 @@ module Eluent
           end
         end
 
-        @indexer.remove_bond(bond)
+        indexer.remove_bond(bond)
         true
       end
 
       def bonds_for(atom_id)
         ensure_loaded!
-        { outgoing: @indexer.bonds_from(atom_id), incoming: @indexer.bonds_to(atom_id) }
+        { outgoing: indexer.bonds_from(atom_id), incoming: indexer.bonds_to(atom_id) }
       end
 
       # --- Comment Operations ---
@@ -194,13 +193,13 @@ module Eluent
         target_file = file_containing_atom(parent_id)
 
         FileOperations.append_record(target_file, Serializers::CommentSerializer.serialize(comment))
-        @indexer.index_comment(comment)
+        indexer.index_comment(comment)
         comment
       end
 
       def comments_for(atom_id)
         ensure_loaded!
-        @indexer.comments_for(atom_id)
+        indexer.comments_for(atom_id)
       end
 
       # --- Ephemeral Operations ---
@@ -282,7 +281,7 @@ module Eluent
       end
 
       def regenerate_id_if_collision(atom, attrs)
-        return atom unless @indexer.atom_exists?(atom.id)
+        return atom unless indexer.atom_exists?(atom.id)
 
         attrs[:id] = Registry::IdGenerator.generate_atom_id(repo_name)
         Models::Atom.new(**attrs)
@@ -301,7 +300,7 @@ module Eluent
       # --- Comment Helpers ---
 
       def build_comment(parent_id:, author:, content:)
-        existing_count = @indexer.comments_for(parent_id).size
+        existing_count = indexer.comments_for(parent_id).size
         comment_id = Registry::IdGenerator.generate_comment_id(atom_id: parent_id, index: existing_count + 1)
 
         Models::Comment.new(id: comment_id, parent_id: parent_id, author: author, content: content)
