@@ -12,6 +12,21 @@ module Eluent
 
       COMMANDS = %w[init create list show update close reopen config].freeze
 
+      ERROR_CODES = {
+        Storage::RepositoryNotFoundError => 'REPO_NOT_FOUND',
+        Storage::RepositoryExistsError => 'REPO_EXISTS',
+        Registry::AmbiguousIdError => 'AMBIGUOUS_ID',
+        Registry::IdNotFoundError => 'NOT_FOUND',
+        Models::ValidationError => 'VALIDATION_ERROR',
+        Models::SelfReferenceError => 'SELF_REFERENCE'
+      }.freeze
+
+      EXIT_CODES = {
+        'REPO_NOT_FOUND' => 3, 'NOT_FOUND' => 3,
+        'REPO_EXISTS' => 4, 'AMBIGUOUS_ID' => 4, 'SELF_REFERENCE' => 4,
+        'VALIDATION_ERROR' => 2
+      }.freeze
+
       usage do
         program 'el'
         desc 'Molecular task tracking for human and synthetic workers'
@@ -152,46 +167,27 @@ module Eluent
       end
 
       def handle_error(exception)
-        code = case exception
-               when Storage::RepositoryNotFoundError then 'REPO_NOT_FOUND'
-               when Storage::RepositoryExistsError then 'REPO_EXISTS'
-               when Registry::AmbiguousIdError then 'AMBIGUOUS_ID'
-               when Registry::IdNotFoundError then 'NOT_FOUND'
-               when Models::ValidationError then 'VALIDATION_ERROR'
-               when Models::SelfReferenceError then 'SELF_REFERENCE'
-               else 'INTERNAL_ERROR'
-               end
+        code = ERROR_CODES.find { |klass, _| exception.is_a?(klass) }&.last || 'INTERNAL_ERROR'
+        exit_code = EXIT_CODES[code] || 1
 
-        exit_code = case code
-                    when 'REPO_NOT_FOUND', 'NOT_FOUND' then 3
-                    when 'REPO_EXISTS', 'AMBIGUOUS_ID', 'SELF_REFERENCE' then 4
-                    when 'VALIDATION_ERROR' then 2
-                    else 1
-                    end
-
-        if @robot_mode
-          response = {
-            status: 'error',
-            error: {
-              code: code,
-              message: exception.message
-            }
-          }
-
-          if exception.is_a?(Registry::AmbiguousIdError)
-            response[:error][:details] = {
-              candidates: exception.candidates.map(&:to_h)
-            }
-          end
-
-          puts JSON.generate(response)
-        else
-          warn "#{@pastel.red("el: error: #{code}:")} #{exception.message}"
-
-          warn exception.backtrace.join("\n") if ENV['EL_DEBUG'] || @argv.include?('--debug')
-        end
+        @robot_mode ? output_error_json(exception, code) : output_error_text(exception, code)
 
         exit_code
+      end
+
+      def output_error_json(exception, code)
+        response = { status: 'error', error: { code: code, message: exception.message } }
+
+        if exception.is_a?(Registry::AmbiguousIdError)
+          response[:error][:details] = { candidates: exception.candidates.map(&:to_h) }
+        end
+
+        puts JSON.generate(response)
+      end
+
+      def output_error_text(exception, code)
+        warn "#{@pastel.red("el: error: #{code}:")} #{exception.message}"
+        warn exception.backtrace.join("\n") if ENV['EL_DEBUG'] || @argv.include?('--debug')
       end
     end
 

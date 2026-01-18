@@ -23,7 +23,7 @@ module IdHelper
     suffixes = ('A'..'Z').to_a + ('0'..'9').to_a
     (0...count).map do |i|
       char = suffixes[i % suffixes.size]
-      test_atom_id("#{char * 16}")
+      test_atom_id((char * 16).to_s)
     end
   end
 

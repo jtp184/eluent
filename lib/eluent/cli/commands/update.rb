@@ -7,6 +7,15 @@ module Eluent
     module Commands
       # Update work item fields
       class Update < BaseCommand
+        SIMPLE_FIELDS = {
+          title: :title,
+          description: :description,
+          type: :issue_type,
+          priority: :priority,
+          status: :status,
+          assignee: :assignee
+        }.freeze
+
         usage do
           program 'el update'
           desc 'Update work item fields'
@@ -103,77 +112,59 @@ module Eluent
           return error('NOT_FOUND', "Atom not found: #{params[:id]}") unless atom
 
           changes = {}
+          apply_simple_updates(atom, changes)
+          apply_special_updates(atom, changes)
+          apply_label_changes(atom, changes)
 
-          # Apply updates
-          if params[:title]
-            atom.title = params[:title]
-            changes[:title] = params[:title]
+          return error('INVALID_REQUEST', 'No changes specified') if changes.empty? && !params[:persist]
+
+          apply_persist(atom, changes)
+          repository.update_atom(atom)
+
+          short_id = repository.id_resolver.short_id(atom)
+          success("Updated #{short_id}", data: { id: atom.id, changes: changes })
+        end
+
+        private
+
+        def apply_simple_updates(atom, changes)
+          SIMPLE_FIELDS.each do |param_key, attr_key|
+            next unless params[param_key]
+
+            atom.public_send(:"#{attr_key}=", params[param_key])
+            changes[attr_key] = params[param_key]
           end
+        end
 
-          if params[:description]
-            atom.description = params[:description]
-            changes[:description] = params[:description]
-          end
-
-          if params[:type]
-            atom.issue_type = params[:type]
-            changes[:issue_type] = params[:type]
-          end
-
-          if params[:priority]
-            atom.priority = params[:priority]
-            changes[:priority] = params[:priority]
-          end
-
-          if params[:status]
-            atom.status = params[:status]
-            changes[:status] = params[:status]
-          end
-
-          if params[:assignee]
-            atom.assignee = params[:assignee]
-            changes[:assignee] = params[:assignee]
-          end
-
+        def apply_special_updates(atom, changes)
           if params[:clear_assignee]
             atom.assignee = nil
             changes[:assignee] = nil
           end
 
-          if params[:defer_until]
-            atom.defer_until = Time.parse(params[:defer_until])
-            changes[:defer_until] = params[:defer_until]
-          end
+          return unless params[:defer_until]
 
-          # Add labels
+          atom.defer_until = Time.parse(params[:defer_until])
+          changes[:defer_until] = params[:defer_until]
+        end
+
+        def apply_label_changes(atom, changes)
           Array(params[:label]).each do |label|
             atom.labels << label
-            changes[:added_labels] ||= []
-            changes[:added_labels] << label
+            (changes[:added_labels] ||= []) << label
           end
 
-          # Remove labels
           Array(params[:remove_label]).each do |label|
             atom.labels.delete(label)
-            changes[:removed_labels] ||= []
-            changes[:removed_labels] << label
+            (changes[:removed_labels] ||= []) << label
           end
+        end
 
-          return error('INVALID_REQUEST', 'No changes specified') if changes.empty? && !params[:persist]
+        def apply_persist(atom, changes)
+          return unless params[:persist]
 
-          # Handle persist flag
-          if params[:persist]
-            repository.persist_atom(atom.id)
-            changes[:persisted] = true
-          end
-
-          repository.update_atom(atom)
-
-          short_id = repository.id_resolver.short_id(atom)
-          success("Updated #{short_id}", data: {
-                    id: atom.id,
-                    changes: changes
-                  })
+          repository.persist_atom(atom.id)
+          changes[:persisted] = true
         end
       end
     end

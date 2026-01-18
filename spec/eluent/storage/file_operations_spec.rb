@@ -7,7 +7,7 @@ RSpec.describe Eluent::Storage::FileOperations do
   let(:temp_dir) { Dir.mktmpdir }
   let(:test_path) { File.join(temp_dir, 'data.jsonl') }
 
-  after { FileUtils.remove_entry(temp_dir) if Dir.exist?(temp_dir) }
+  after { FileUtils.rm_rf(temp_dir) }
 
   describe '.append_record' do
     it 'creates the file if it does not exist' do

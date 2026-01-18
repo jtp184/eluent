@@ -132,7 +132,8 @@ module Eluent
       end
 
       def clear
-        [exact_index, randomness_tries, bonds_by_source, bonds_by_target, comments_by_parent, atom_sources].each(&:clear)
+        [exact_index, randomness_tries, bonds_by_source, bonds_by_target, comments_by_parent,
+         atom_sources].each(&:clear)
       end
 
       def rebuild(atoms: [], bonds: [], comments: [])
@@ -144,7 +145,8 @@ module Eluent
 
       private
 
-      attr_reader :exact_index, :randomness_tries, :bonds_by_source, :bonds_by_target, :comments_by_parent, :atom_sources
+      attr_reader :exact_index, :randomness_tries, :bonds_by_source, :bonds_by_target, :comments_by_parent,
+                  :atom_sources
 
       def index_atom_in_trie(atom)
         with_atom_id_parts(atom.id) do |repo, randomness|

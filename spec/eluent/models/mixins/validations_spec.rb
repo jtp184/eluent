@@ -35,8 +35,12 @@ RSpec.describe Eluent::Models::Validations do
     end
 
     it 'outputs a warning when truncating', :aggregate_failures do
+      original_verbose = $VERBOSE
+      $VERBOSE = true
       expect { validator.validate_title('A' * 600) }
         .to output(/warning: title truncated/).to_stderr
+    ensure
+      $VERBOSE = original_verbose
     end
   end
 

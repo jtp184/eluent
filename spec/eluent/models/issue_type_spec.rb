@@ -2,8 +2,8 @@
 
 RSpec.describe Eluent::Models::IssueType do
   it_behaves_like 'a value object with extendable collection',
-                  Eluent::Models::IssueType,
-                  Eluent::Models::IssueType.defaults
+                  described_class,
+                  described_class.defaults
 
   describe 'default issue types' do
     it 'includes feature' do

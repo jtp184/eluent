@@ -68,7 +68,11 @@ RSpec.describe Eluent::Storage::ConfigLoader, :filesystem do
       it 'uses default for invalid cleanup_days' do
         setup_config_file(root_path, { 'repo_name' => 'test', 'ephemeral' => { 'cleanup_days' => 1000 } })
 
+        original_verbose = $VERBOSE
+        $VERBOSE = true
         expect { config_loader.load }.to output(/warning/).to_stderr
+      ensure
+        $VERBOSE = original_verbose
       end
     end
 

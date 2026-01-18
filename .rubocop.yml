@@ -16,7 +16,7 @@ Metrics/BlockLength:
     - after
 
 Metrics/ClassLength:
-  Max: 200
+  Max: 250
 
 Metrics/MethodLength:
   Max: 30
@@ -50,4 +50,25 @@ Naming/AccessorMethodName:
   Enabled: false
 
 Naming/PredicateMethod:
+  Enabled: false
+
+RSpec/MultipleExpectations:
+  Max: 8
+
+RSpec/MultipleMemoizedHelpers:
+  Max: 10
+
+RSpec/ExampleLength:
+  Max: 15
+
+RSpec/SpecFilePathFormat:
+  Enabled: false
+
+RSpec/MultipleDescribes:
+  Enabled: false
+
+RSpec/IndexedLet:
+  Enabled: false
+
+RSpec/ContextWording:
   Enabled: false

@@ -11,7 +11,7 @@ RSpec.shared_examples 'an entity with identity' do
     end
 
     it 'is not equal to nil' do
-      expect(entity).not_to eq(nil)
+      expect(entity).not_to be_nil
     end
 
     it 'is not equal to other types' do

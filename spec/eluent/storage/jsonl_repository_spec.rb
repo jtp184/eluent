@@ -9,7 +9,7 @@ RSpec.describe Eluent::Storage::JsonlRepository do
   let(:repository) { described_class.new(root_path) }
   let(:paths) { repository.paths }
 
-  after { FileUtils.remove_entry(temp_dir) if Dir.exist?(temp_dir) }
+  after { FileUtils.rm_rf(temp_dir) }
 
   def read_jsonl_records(path)
     return [] unless File.exist?(path)

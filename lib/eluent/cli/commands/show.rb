@@ -91,7 +91,14 @@ module Eluent
           display_info = repository.id_resolver.display_info(atom)
           short_id = display_info&.dig(:short) || atom.id
 
-          # Title box
+          output_title_box(atom, short_id)
+          output_main_info(atom)
+          output_verbose_info(atom, display_info) if params[:verbose]
+          output_dependencies(atom) if params[:deps]
+          output_comments(atom) if params[:comments]
+        end
+
+        def output_title_box(atom, short_id)
           title_box = TTY::Box.frame(
             title: { top_left: " #{format_type(atom.issue_type, upcase: true)} " },
             padding: [0, 1],
@@ -100,8 +107,9 @@ module Eluent
             "#{@pastel.bold(atom.title)}\n#{@pastel.dim(short_id)}"
           end
           puts title_box
+        end
 
-          # Main info
+        def output_main_info(atom)
           puts "\n#{@pastel.bold('Status:')} #{format_status(atom.status)}"
           puts "#{@pastel.bold('Priority:')} #{format_priority_with_label(atom.priority)}"
           puts "#{@pastel.bold('Assignee:')} #{atom.assignee || @pastel.dim('unassigned')}"
@@ -117,29 +125,19 @@ module Eluent
           end
 
           puts "\n#{@pastel.bold('Close Reason:')} #{atom.close_reason}" if atom.close_reason
-
           puts "#{@pastel.bold('Deferred Until:')} #{atom.defer_until}" if atom.defer_until
+        end
 
-          # Verbose mode - show IDs and timestamps
-          if params[:verbose]
-            puts "\n#{@pastel.dim('─' * 40)}"
-            puts @pastel.dim("Full ID:   #{atom.id}")
-            if display_info
-              puts @pastel.dim("Timestamp: #{display_info[:timestamp]} (#{display_info[:created_time]})")
-              puts @pastel.dim("Random:    #{display_info[:randomness]}")
-            end
-            puts @pastel.dim("Created:   #{atom.created_at}")
-            puts @pastel.dim("Updated:   #{atom.updated_at}")
-            puts @pastel.dim("Parent:    #{atom.parent_id || 'none'}")
+        def output_verbose_info(atom, display_info)
+          puts "\n#{@pastel.dim('─' * 40)}"
+          puts @pastel.dim("Full ID:   #{atom.id}")
+          if display_info
+            puts @pastel.dim("Timestamp: #{display_info[:timestamp]} (#{display_info[:created_time]})")
+            puts @pastel.dim("Random:    #{display_info[:randomness]}")
           end
-
-          # Dependencies
-          output_dependencies(atom) if params[:deps]
-
-          # Comments
-          return unless params[:comments]
-
-          output_comments(atom)
+          puts @pastel.dim("Created:   #{atom.created_at}")
+          puts @pastel.dim("Updated:   #{atom.updated_at}")
+          puts @pastel.dim("Parent:    #{atom.parent_id || 'none'}")
         end
 
         def output_dependencies(atom)
@@ -152,22 +150,19 @@ module Eluent
             return
           end
 
-          if bonds[:outgoing].any?
-            puts "  #{@pastel.yellow('Depends on:')}"
-            bonds[:outgoing].each do |bond|
-              target = repository.find_atom_by_id(bond.target_id)
-              target_title = target ? truncate(target.title, max_length: 40) : bond.target_id
-              puts "    #{format_dep_type(bond.dependency_type)} #{target_title}"
-            end
-          end
+          output_bond_list(bonds[:outgoing], label: @pastel.yellow('Depends on:'), id_method: :target_id)
+          output_bond_list(bonds[:incoming], label: @pastel.green('Depended on by:'), id_method: :source_id)
+        end
 
-          return unless bonds[:incoming].any?
+        def output_bond_list(bonds, label:, id_method:)
+          return if bonds.empty?
 
-          puts "  #{@pastel.green('Depended on by:')}"
-          bonds[:incoming].each do |bond|
-            source = repository.find_atom_by_id(bond.source_id)
-            source_title = source ? truncate(source.title, max_length: 40) : bond.source_id
-            puts "    #{format_dep_type(bond.dependency_type)} #{source_title}"
+          puts "  #{label}"
+          bonds.each do |bond|
+            related_id = bond.public_send(id_method)
+            related = repository.find_atom_by_id(related_id)
+            title = related ? truncate(related.title, max_length: 40) : related_id
+            puts "    #{format_dep_type(bond.dependency_type)} #{title}"
           end
         end
 

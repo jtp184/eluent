@@ -2,8 +2,8 @@
 
 RSpec.describe Eluent::Models::DependencyType do
   it_behaves_like 'a value object with extendable collection',
-                  Eluent::Models::DependencyType,
-                  Eluent::Models::DependencyType.defaults
+                  described_class,
+                  described_class.defaults
 
   describe 'default dependency types' do
     it 'includes blocks' do

@@ -2,8 +2,8 @@
 
 RSpec.describe Eluent::Models::Status do
   it_behaves_like 'a value object with extendable collection',
-                  Eluent::Models::Status,
-                  Eluent::Models::Status.defaults
+                  described_class,
+                  described_class.defaults
 
   describe 'default statuses' do
     it 'includes open' do
