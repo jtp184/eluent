@@ -1,6 +1,6 @@
 # Eluent Implementation Progress
 
-**Last Updated**: 2026-01-16
+**Last Updated**: 2026-01-17
 
 This document tracks progress towards completing the implementation plan defined in `IMPLEMENTATION_PLAN.md`.
 
@@ -10,7 +10,7 @@ This document tracks progress towards completing the implementation plan defined
 
 | Phase | Status | Progress |
 |-------|--------|----------|
-| Phase 1: Foundation | Not Started | 0% |
+| Phase 1: Foundation | Complete | 100% |
 | Phase 2: Graph Operations | Not Started | 0% |
 | Phase 3: Sync and Daemon | Not Started | 0% |
 | Phase 4: Formulas and Compaction | Not Started | 0% |
@@ -23,46 +23,61 @@ This document tracks progress towards completing the implementation plan defined
 
 Models, Storage, basic CLI (init/create/list/show/update/close/reopen)
 
+### Core
+
+- [x] `lib/eluent/version.rb` — Gem version constant
+
 ### Models
 
-- [ ] `lib/eluent/models/atom.rb` — Core Atom entity with all fields
-- [ ] `lib/eluent/models/bond.rb` — Bond entity with all dependency types
-- [ ] `lib/eluent/models/comment.rb` — Append-only discussion
+- [x] `lib/eluent/models/atom.rb` — Core Atom entity with all fields
+- [x] `lib/eluent/models/bond.rb` — Bond entity with all dependency types
+- [x] `lib/eluent/models/comment.rb` — Append-only discussion
+- [x] `lib/eluent/models/status.rb` — Status enum (open, in_progress, blocked, deferred, closed, discard)
+- [x] `lib/eluent/models/issue_type.rb` — Issue type enum (feature, bug, task, artifact, epic, formula)
+- [x] `lib/eluent/models/dependency_type.rb` — Dependency type definitions with blocking semantics
+- [x] `lib/eluent/models/mixins/extendable_collection.rb` — Mixin for plugin-extensible enumerations
+- [x] `lib/eluent/models/mixins/validations.rb` — Shared validation logic for models
 
 ### Storage
 
-- [ ] `lib/eluent/storage/jsonl_repository.rb` — JSONL persistence with locking
-- [ ] `lib/eluent/storage/indexer.rb` — Dual-index: exact hash + randomness prefix trie
-- [ ] `lib/eluent/storage/prefix_trie.rb` — Prefix matching index structure
-- [ ] `lib/eluent/storage/serializers/atom_serializer.rb` — Atom JSON serialization
-- [ ] `lib/eluent/storage/serializers/bond_serializer.rb` — Bond JSON serialization
+- [x] `lib/eluent/storage/jsonl_repository.rb` — JSONL persistence with locking
+- [x] `lib/eluent/storage/indexer.rb` — Dual-index: exact hash + randomness prefix trie
+- [x] `lib/eluent/storage/prefix_trie.rb` — Prefix matching index structure
+- [x] `lib/eluent/storage/paths.rb` — Path resolution for .eluent/ directory
+- [x] `lib/eluent/storage/file_operations.rb` — File I/O with locking and atomic writes
+- [x] `lib/eluent/storage/config_loader.rb` — config.yaml loading and validation
+- [x] `lib/eluent/storage/serializers/base.rb` — Base serializer with type dispatch
+- [x] `lib/eluent/storage/serializers/atom_serializer.rb` — Atom JSON serialization
+- [x] `lib/eluent/storage/serializers/bond_serializer.rb` — Bond JSON serialization
+- [x] `lib/eluent/storage/serializers/comment_serializer.rb` — Comment JSON serialization
 
 ### Registry
 
-- [ ] `lib/eluent/registry/id_generator.rb` — ULID generation (Crockford Base32)
-- [ ] `lib/eluent/registry/id_resolver.rb` — Shortening, normalization, disambiguation
+- [x] `lib/eluent/registry/id_generator.rb` — ULID generation (Crockford Base32)
+- [x] `lib/eluent/registry/id_resolver.rb` — Shortening, normalization, disambiguation
 
 ### CLI Foundation
 
-- [ ] `lib/eluent/cli/application.rb` — Main CLI entry point
-- [ ] `exe/el` — CLI executable
+- [x] `lib/eluent/cli/application.rb` — Main CLI entry point
+- [x] `lib/eluent/cli/formatting.rb` — Output formatting helpers (tables, colors)
+- [x] `exe/el` — CLI executable
 
 ### CLI Commands (Phase 1)
 
-- [ ] `lib/eluent/cli/commands/init.rb` — Initialize .eluent/
-- [ ] `lib/eluent/cli/commands/create.rb` — Create work items
-- [ ] `lib/eluent/cli/commands/list.rb` — List with filters
-- [ ] `lib/eluent/cli/commands/show.rb` — Show item details
-- [ ] `lib/eluent/cli/commands/update.rb` — Update work item fields
-- [ ] `lib/eluent/cli/commands/close.rb` — Close work item with reason
-- [ ] `lib/eluent/cli/commands/reopen.rb` — Reopen closed item
-- [ ] `lib/eluent/cli/commands/config.rb` — Configuration management
+- [x] `lib/eluent/cli/commands/init.rb` — Initialize .eluent/
+- [x] `lib/eluent/cli/commands/create.rb` — Create work items
+- [x] `lib/eluent/cli/commands/list.rb` — List with filters
+- [x] `lib/eluent/cli/commands/show.rb` — Show item details
+- [x] `lib/eluent/cli/commands/update.rb` — Update work item fields
+- [x] `lib/eluent/cli/commands/close.rb` — Close work item with reason
+- [x] `lib/eluent/cli/commands/reopen.rb` — Reopen closed item
+- [x] `lib/eluent/cli/commands/config.rb` — Configuration management
 
 ### Project Setup
 
-- [ ] `eluent.gemspec` — Gem specification with dependencies
-- [ ] `Gemfile` — Development dependencies
-- [ ] `.eluent/` directory structure documentation
+- [x] `eluent.gemspec` — Gem specification with dependencies
+- [x] `Gemfile` — Development dependencies
+- [x] `.eluent/` directory structure documentation (created via init command)
 
 ---
 
@@ -78,7 +93,6 @@ Dependencies, blocking, ready work
 
 ### Lifecycle
 
-- [ ] `lib/eluent/lifecycle/status.rb` — Status enum (open, in_progress, blocked, deferred, closed, discard)
 - [ ] `lib/eluent/lifecycle/transition.rb` — State machine
 - [ ] `lib/eluent/lifecycle/readiness_calculator.rb` — Ready work query with type exclusions
 
