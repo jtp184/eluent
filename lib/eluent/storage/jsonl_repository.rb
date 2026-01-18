@@ -136,7 +136,7 @@ module Eluent
                .then { |atoms| status ? atoms.select { |a| a.status == status } : atoms }
                .then { |atoms| issue_type ? atoms.select { |a| a.issue_type == issue_type } : atoms }
                .then { |atoms| assignee ? atoms.select { |a| a.assignee == assignee } : atoms }
-               .then { |atoms| labels&.any? ? atoms.select { |a| (labels - a.labels).empty? } : atoms }
+               .then { |atoms| labels&.any? ? atoms.select { |a| (labels - a.labels.to_a).empty? } : atoms }
                .sort_by(&:created_at)
       end
 

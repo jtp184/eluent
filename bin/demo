@@ -1,0 +1,281 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Demo script for eluent - exercises all available features
+# Run from project root: bin/demo
+
+require 'fileutils'
+
+# Setup paths
+PROJECT_ROOT = Pathname.new(__dir__).parent
+DEMO_DIR = PROJECT_ROOT / 'tmp' / 'demo'
+EL_CMD = "bundle exec ruby #{PROJECT_ROOT / 'exe' / 'el'}".freeze
+
+# Helper to run el commands
+def el(args, capture: false, show_output: true)
+  cmd = "cd #{DEMO_DIR} && #{EL_CMD} #{args}"
+  puts "\n\e[36m$ el #{args}\e[0m" if show_output
+
+  if capture
+    output = `#{cmd} 2>&1`
+    puts output if show_output
+    output
+  else
+    system(cmd)
+  end
+end
+
+def section(title)
+  puts "\n\e[33m#{'=' * 60}\e[0m"
+  puts "\e[33m#{title}\e[0m"
+  puts "\e[33m#{'=' * 60}\e[0m"
+end
+
+def step(description)
+  puts "\n\e[32m>> #{description}\e[0m"
+end
+
+# Clean up and create demo directory
+section 'SETUP'
+step "Creating fresh demo directory at #{DEMO_DIR}"
+FileUtils.rm_rf(DEMO_DIR)
+FileUtils.mkdir_p(DEMO_DIR)
+
+# Initialize git (required for el init)
+step 'Initializing git repository'
+system("cd #{DEMO_DIR} && git init -q")
+
+# ============================================================
+section '1. INITIALIZE REPOSITORY'
+# ============================================================
+
+step 'Initialize eluent repository'
+el 'init --name demo-project'
+
+step 'Show current config'
+el 'config show'
+
+# ============================================================
+section '2. CREATE ATOMS (Work Items)'
+# ============================================================
+
+step 'Create a feature with high priority'
+output = el "create -t 'User authentication system' " \
+            "-d 'Implement login, logout, and session management' --type feature -p 1",
+            capture: true
+feature_id = output[/Created \w+ (\w+):/, 1]
+puts "  -> Short ID: #{feature_id}"
+
+step 'Create a bug report'
+output = el "create -t 'Login button unresponsive on mobile' " \
+            "-d 'Users report the login button does not respond on iOS Safari' --type bug -p 2",
+            capture: true
+bug_id = output[/Created \w+ (\w+):/, 1]
+puts "  -> Short ID: #{bug_id}"
+
+step 'Create several tasks'
+output = el "create -t 'Design database schema' --type task -p 2 -l backend -l database", capture: true
+task1_id = output[/Created \w+ (\w+):/, 1]
+puts "  -> task1 ID: #{task1_id}"
+
+output = el "create -t 'Write API endpoints' --type task -p 3 -l backend -l api", capture: true
+task2_id = output[/Created \w+ (\w+):/, 1]
+puts "  -> task2 ID: #{task2_id}"
+
+output = el "create -t 'Create login form UI' --type task -p 3 -l frontend -l ui", capture: true
+task3_id = output[/Created \w+ (\w+):/, 1]
+puts "  -> task3 ID: #{task3_id}"
+
+output = el "create -t 'Write unit tests' --type task -p 4 -l testing", capture: true
+task4_id = output[/Created \w+ (\w+):/, 1]
+puts "  -> task4 ID: #{task4_id}"
+
+step 'Create an epic to group related work'
+output = el "create -t 'Q1 Authentication Milestone' --type epic -p 0", capture: true
+epic_id = output[/Created \w+ (\w+):/, 1]
+puts "  -> epic ID: #{epic_id}"
+
+step 'Create an ephemeral task (local-only, not synced)'
+output = el "create -t 'Local debugging notes' --type task -e", capture: true
+ephemeral_id = output[/Created \w+ (\w+):/, 1]
+puts "  -> ephemeral ID: #{ephemeral_id}"
+
+# ============================================================
+section '3. LIST ATOMS'
+# ============================================================
+
+step 'List all open items'
+el 'list'
+
+step 'List only bugs'
+el 'list --type bug'
+
+step 'List by label (backend)'
+el 'list -l backend'
+
+step 'List high priority items (0-2)'
+el 'list -p 2'
+
+step 'List ephemeral items'
+el 'list -e'
+
+# ============================================================
+section '4. SHOW ATOM DETAILS'
+# ============================================================
+
+step 'Show feature details'
+el "show #{feature_id}"
+
+step 'Show feature with verbose output'
+el "show #{feature_id} -v"
+
+# ============================================================
+section '5. CREATE DEPENDENCIES (Bonds)'
+# ============================================================
+
+step 'Create blocking dependencies (task1 blocks task2)'
+el "create -t 'Setup CI/CD pipeline' --type task -b #{task1_id}", capture: true
+
+step 'Show dependencies on the feature'
+el "show #{feature_id} -d"
+
+# ============================================================
+section '6. ADD COMMENTS'
+# ============================================================
+
+# Comments are created via the repository directly in the current implementation
+# Let's use Ruby API to add comments
+step 'Adding comments via Ruby API'
+
+require_relative '../lib/eluent'
+
+repo = Eluent::Storage::JsonlRepository.new(DEMO_DIR)
+repo.load!
+
+# Find the bug atom
+bug_atom = repo.find_atom(bug_id)
+if bug_atom
+  repo.create_comment(parent_id: bug_atom.id, author: 'developer', content: 'I can reproduce this on iOS 17.2')
+  repo.create_comment(parent_id: bug_atom.id, author: 'qa-team', content: 'Also affects iPad Safari')
+  repo.create_comment(parent_id: bug_atom.id, author: 'developer',
+                      content: 'Root cause: CSS touch-action property missing')
+  puts "\e[32mAdded 3 comments to bug #{bug_id}\e[0m"
+else
+  puts "\e[31mBug #{bug_id} not found!\e[0m"
+end
+
+step 'Show bug with comments'
+el "show #{bug_id} -c"
+
+# ============================================================
+section '7. UPDATE ATOMS'
+# ============================================================
+
+step 'Update task status to in_progress'
+el "update #{task1_id} -s in_progress"
+
+step 'Add labels to existing task'
+el "update #{task2_id} -l urgent -l sprint-1"
+
+step 'Assign a task'
+el "update #{task3_id} -a alice"
+
+step 'Update priority'
+el "update #{task4_id} -p 2"
+
+step 'Defer a task until next week'
+next_week = (Time.now + (7 * 24 * 60 * 60)).strftime('%Y-%m-%d')
+el "update #{task4_id} --defer-until #{next_week}"
+
+step 'List to see updates'
+el 'list'
+
+# ============================================================
+section '8. CLOSE AND REOPEN'
+# ============================================================
+
+step 'Close the bug with a reason'
+el "close #{bug_id} -r 'Fixed in commit abc123'"
+
+step 'Show closed bug'
+el "show #{bug_id}"
+
+step 'List all (including closed)'
+el 'list --all'
+
+step 'Reopen the bug (found regression)'
+el "reopen #{bug_id}"
+
+step 'Show reopened bug'
+el "show #{bug_id}"
+
+# ============================================================
+section '9. CONFIGURATION'
+# ============================================================
+
+step 'Show current config'
+el 'config show'
+
+step 'Set default priority'
+el 'config set defaults.priority 3'
+
+step 'Get specific config value'
+el 'config get defaults.priority'
+
+step 'Show updated config'
+el 'config show'
+
+# ============================================================
+section '10. PERSIST EPHEMERAL'
+# ============================================================
+
+step 'Show ephemeral items before persisting'
+el 'list -e'
+
+step 'Persist ephemeral task'
+el "update #{ephemeral_id} --persist"
+
+step 'Ephemeral list should be empty now'
+el 'list -e'
+
+step 'Task should appear in regular list'
+el 'list'
+
+# ============================================================
+section '11. ROBOT MODE (JSON OUTPUT)'
+# ============================================================
+
+step 'List in robot mode (machine-readable JSON)'
+el 'list --robot'
+
+step 'Show in robot mode'
+el "show #{feature_id} --robot"
+
+# ============================================================
+section 'SUMMARY'
+# ============================================================
+
+puts "\n\e[35mDemo completed successfully!\e[0m"
+puts "\nData stored in: #{DEMO_DIR}/.eluent/"
+puts "\nFiles created:"
+Dir.glob("#{DEMO_DIR}/.eluent/*").each do |f|
+  puts "  #{File.basename(f)} (#{File.size(f)} bytes)"
+end
+
+puts "\n\e[35mData file contents:\e[0m"
+data_file = DEMO_DIR / '.eluent' / 'data.jsonl'
+File.readlines(data_file).each do |line|
+  data = JSON.parse(line, symbolize_names: true)
+  case data[:_type]
+  when 'header'
+    puts "\e[33m[HEADER]\e[0m repo=#{data[:repo_name]}"
+  when 'atom'
+    puts "\e[32m[ATOM]\e[0m #{data[:id].split('-').last[0, 4]} #{data[:status]} #{data[:issue_type]}: #{data[:title]}"
+  when 'bond'
+    source = data[:source_id].split('-').last[0, 4]
+    target = data[:target_id].split('-').last[0, 4]
+    puts "\e[34m[BOND]\e[0m #{source} --#{data[:dependency_type]}--> #{target}"
+  when 'comment'
+    puts "\e[36m[COMMENT]\e[0m #{data[:author]}: #{data[:content][0, 40]}..."
+  end
+end

@@ -34,12 +34,12 @@ module Eluent
       private
 
       def format_type(type, upcase: false)
-        display = upcase ? type.upcase : type
-        @pastel.decorate(display, TYPE_COLORS[type] || :white)
+        display = upcase ? type.to_s.upcase : type.to_s
+        @pastel.decorate(display, TYPE_COLORS[type.to_s] || :white)
       end
 
       def format_status(status)
-        @pastel.decorate(status, STATUS_COLORS[status] || :white)
+        @pastel.decorate(status.to_s, STATUS_COLORS[status.to_s] || :white)
       end
 
       def format_priority(priority)

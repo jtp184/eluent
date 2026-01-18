@@ -110,8 +110,9 @@ module Eluent
           return 2
         end
 
-        # Build command-specific args
-        command_argv = params[:args] || []
+        # Extract command-specific args from original argv (after command name)
+        # This avoids TTY::Option consuming subcommand options
+        command_argv = extract_subcommand_args(command)
         command_argv << '--help' if params[:help]
         command_argv << '--robot' if @robot_mode
         command_argv << '--verbose' if params[:verbose]
@@ -129,6 +130,16 @@ module Eluent
         command_class = Commands.const_get(command.capitalize)
         cmd = command_class.new(argv, robot_mode: @robot_mode)
         cmd.run
+      end
+
+      def extract_subcommand_args(command)
+        # Find command position in original argv, return everything after it
+        # Skip global flags that appear before the command
+        global_flags = %w[--robot --verbose -v --debug --help -h --version -V]
+        command_idx = @argv.find_index(command)
+        return [] unless command_idx
+
+        @argv[(command_idx + 1)..].reject { |arg| global_flags.include?(arg) }
       end
 
       def output_version
