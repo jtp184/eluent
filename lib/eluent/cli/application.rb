@@ -20,7 +20,7 @@ module Eluent
         Models::ValidationError => 'VALIDATION_ERROR',
         Models::SelfReferenceError => 'SELF_REFERENCE',
         Graph::CycleDetectedError => 'CYCLE_DETECTED',
-        Lifecycle::InvalidTransitionError => 'INVALID_TRANSITION'
+        Models::InvalidTransitionError => 'INVALID_TRANSITION'
       }.freeze
 
       EXIT_CODES = {

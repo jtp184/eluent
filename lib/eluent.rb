@@ -40,5 +40,4 @@ require_relative 'eluent/graph/cycle_detector'
 require_relative 'eluent/graph/blocking_resolver'
 
 # Lifecycle
-require_relative 'eluent/lifecycle/transition'
 require_relative 'eluent/lifecycle/readiness_calculator'
