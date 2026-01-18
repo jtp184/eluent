@@ -31,6 +31,17 @@ module Eluent
         5 => :dim
       }.freeze
 
+      DEP_TYPE_COLORS = {
+        'blocks' => :red,
+        'parent_child' => :blue,
+        'conditional_blocks' => :yellow,
+        'waits_for' => :magenta,
+        'related' => :cyan,
+        'duplicates' => :dim,
+        'discovered_from' => :green,
+        'replies_to' => :white
+      }.freeze
+
       private
 
       def format_type(type, upcase: false)
@@ -57,6 +68,11 @@ module Eluent
         return '' unless text
 
         text.length > max_length ? "#{text[0, max_length - 3]}..." : text
+      end
+
+      def format_dep_type(type)
+        type_str = type.to_s
+        @pastel.decorate("[#{type_str}]", DEP_TYPE_COLORS[type_str] || :white)
       end
     end
   end

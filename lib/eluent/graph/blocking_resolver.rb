@@ -55,7 +55,7 @@ module Eluent
         return false if atom.nil?
         return false if atom.abstract?
         return false if atom.closed? || atom.discard?
-        return false if deferred_future?(atom)
+        return false if atom.defer_future?
         return false if blocked?(atom)[:blocked]
 
         true
@@ -72,16 +72,11 @@ module Eluent
 
       def check_bond_blocking(bond, source)
         case bond.dependency_type.name
-        when :blocks
-          blocking_by_blocks?(source)
-        when :parent_child
-          blocking_by_parent_child?(source)
-        when :conditional_blocks
-          blocking_by_conditional?(source)
-        when :waits_for
-          blocking_by_waits_for?(source, exclude_id: bond.target_id)
-        else
-          false
+        when :blocks then blocking_by_blocks?(source)
+        when :parent_child then blocking_by_parent_child?(source)
+        when :conditional_blocks then blocking_by_conditional?(source)
+        when :waits_for then blocking_by_waits_for?(source, exclude_id: bond.target_id)
+        else false
         end
       end
 
@@ -127,9 +122,6 @@ module Eluent
         !parent.closed? || (grandparent && blocking_parent?(grandparent))
       end
 
-      def deferred_future?(atom)
-        atom.deferred? && atom.defer_until && atom.defer_until > Time.now.utc
-      end
     end
   end
 end

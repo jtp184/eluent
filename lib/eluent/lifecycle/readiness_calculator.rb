@@ -47,7 +47,7 @@ module Eluent
       def ready_for_work?(atom, include_abstract:)
         return false if atom.closed? || atom.discard?
         return false if atom.abstract? && !include_abstract
-        return false if deferred_future?(atom)
+        return false if atom.defer_future?
 
         !blocking_resolver.blocked?(atom)[:blocked]
       end
@@ -73,10 +73,6 @@ module Eluent
         when String then type.to_sym
         else type
         end
-      end
-
-      def deferred_future?(atom)
-        atom.deferred? && atom.defer_until && atom.defer_until > Time.now.utc
       end
 
       def sort_items(items, policy:)

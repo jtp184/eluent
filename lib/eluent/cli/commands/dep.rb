@@ -238,18 +238,6 @@ module Eluent
           puts
         end
 
-        def format_dep_type(type)
-          type_str = type.to_s
-          colors = {
-            'blocks' => :red,
-            'parent_child' => :blue,
-            'conditional_blocks' => :yellow,
-            'waits_for' => :magenta,
-            'related' => :cyan
-          }
-          @pastel.decorate("[#{type_str}]", colors[type_str] || :white)
-        end
-
         def output_tree_json(atom, graph)
           descendants = graph.all_descendants(atom.id, blocking_only: params[:blocking_only])
           ancestors = graph.all_ancestors(atom.id, blocking_only: params[:blocking_only])
