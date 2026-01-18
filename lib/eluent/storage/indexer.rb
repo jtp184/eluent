@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'set'
 require_relative 'prefix_trie'
 require_relative '../registry/id_generator'
 
@@ -12,8 +13,8 @@ module Eluent
       def initialize
         @exact_index = {}
         @randomness_tries = Hash.new { |h, k| h[k] = PrefixTrie.new }
-        @bonds_by_source = Hash.new { |h, k| h[k] = [] }
-        @bonds_by_target = Hash.new { |h, k| h[k] = [] }
+        @bonds_by_source = Hash.new { |h, k| h[k] = Set.new }
+        @bonds_by_target = Hash.new { |h, k| h[k] = Set.new }
         @comments_by_parent = Hash.new { |h, k| h[k] = [] }
         @atom_sources = {}
       end
@@ -41,8 +42,8 @@ module Eluent
       def index_bond(bond)
         return unless bond
 
-        add_to_collection(bonds_by_source[bond.source_id], bond)
-        add_to_collection(bonds_by_target[bond.target_id], bond)
+        bonds_by_source[bond.source_id].add(bond)
+        bonds_by_target[bond.target_id].add(bond)
       end
 
       def remove_bond(bond)
@@ -100,15 +101,15 @@ module Eluent
       end
 
       def bonds_from(atom_id)
-        bonds_by_source[atom_id].dup
+        bonds_by_source[atom_id].to_a
       end
 
       def bonds_to(atom_id)
-        bonds_by_target[atom_id].dup
+        bonds_by_target[atom_id].to_a
       end
 
       def all_bonds
-        bonds_by_source.values.flatten.uniq
+        bonds_by_source.each_value.flat_map(&:to_a)
       end
 
       def comments_for(atom_id)

@@ -283,8 +283,8 @@ module Eluent
       def regenerate_id_if_collision(atom, attrs)
         return atom unless indexer.atom_exists?(atom.id)
 
-        attrs[:id] = Registry::IdGenerator.generate_atom_id(repo_name)
-        Models::Atom.new(**attrs)
+        new_attrs = attrs.merge(id: Registry::IdGenerator.generate_atom_id(repo_name))
+        Models::Atom.new(**new_attrs)
       end
 
       def file_containing_atom(atom_id)

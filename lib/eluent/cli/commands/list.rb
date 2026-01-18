@@ -80,8 +80,8 @@ module Eluent
           ensure_initialized!
 
           atoms = repository.list_atoms(
-            status: params[:all] ? nil : params[:status],
-            issue_type: params[:type],
+            status: params[:all] ? nil : resolve_status(params[:status]),
+            issue_type: resolve_issue_type(params[:type]),
             assignee: params[:assignee],
             labels: Array(params[:label]),
             include_discarded: params[:include_discarded]
@@ -103,6 +103,22 @@ module Eluent
         end
 
         private
+
+        def resolve_status(status_str)
+          return nil unless status_str
+
+          Models::Status[status_str.to_sym]
+        rescue KeyError
+          nil
+        end
+
+        def resolve_issue_type(type_str)
+          return nil unless type_str
+
+          Models::IssueType[type_str.to_sym]
+        rescue KeyError
+          nil
+        end
 
         def output_json(atoms)
           puts JSON.generate({

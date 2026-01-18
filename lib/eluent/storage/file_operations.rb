@@ -15,7 +15,6 @@ module Eluent
         File.open(path, 'a') do |file|
           file.flock(File::LOCK_EX)
           file.puts(serialize_record(record))
-          file.flock(File::LOCK_UN)
         end
       end
 
