@@ -4,3 +4,50 @@ plugins:
 AllCops:
   TargetRubyVersion: 4.0
   NewCops: enable
+
+Metrics/BlockLength:
+  AllowedMethods:
+    - describe
+    - context
+    - feature
+    - scenario
+    - it
+    - before
+    - after
+
+Metrics/ClassLength:
+  Max: 200
+
+Metrics/MethodLength:
+  Max: 30
+  AllowedMethods:
+    - initialize
+    - included
+
+Metrics/AbcSize:
+  Max: 40
+  AllowedMethods:
+    - initialize
+    - included
+
+Metrics/CyclomaticComplexity:
+  Max: 15
+  AllowedMethods:
+    - included
+
+Metrics/PerceivedComplexity:
+  Max: 15
+  AllowedMethods:
+    - included
+
+Metrics/ParameterLists:
+  Max: 20
+
+RSpec/ExpectActual:
+  Enabled: false
+
+Naming/AccessorMethodName:
+  Enabled: false
+
+Naming/PredicateMethod:
+  Enabled: false
