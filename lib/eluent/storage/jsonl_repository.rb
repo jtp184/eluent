@@ -86,7 +86,7 @@ module Eluent
         target_file = attrs[:ephemeral] ? paths.ephemeral_file : paths.data_file
 
         FileOperations.append_record(target_file, Serializers::AtomSerializer.serialize(atom))
-        indexer.index_atom(atom)
+        indexer.index_atom(atom, source_file: target_file)
         atom
       end
 
@@ -259,13 +259,13 @@ module Eluent
 
       def load_data_file(path)
         FileOperations.each_record(path) do |data|
-          index_record(data)
+          index_record(data, source_file: path)
         end
       end
 
-      def index_record(data)
+      def index_record(data, source_file: nil)
         case data[:_type]
-        when 'atom' then @indexer.index_atom(Serializers::AtomSerializer.deserialize(data))
+        when 'atom' then @indexer.index_atom(Serializers::AtomSerializer.deserialize(data), source_file: source_file)
         when 'bond' then @indexer.index_bond(Serializers::BondSerializer.deserialize(data))
         when 'comment' then @indexer.index_comment(Serializers::CommentSerializer.deserialize(data))
         end
@@ -288,13 +288,7 @@ module Eluent
       end
 
       def file_containing_atom(atom_id)
-        return paths.data_file unless paths.ephemeral_exists?
-
-        in_ephemeral = FileOperations.record_exists?(paths.ephemeral_file) do |record|
-          record[:_type] == 'atom' && record[:id] == atom_id
-        end
-
-        in_ephemeral ? paths.ephemeral_file : paths.data_file
+        indexer.source_file_for(atom_id) || paths.data_file
       end
 
       # --- Comment Helpers ---

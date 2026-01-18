@@ -12,8 +12,6 @@ module Eluent
 
       # Append a record to a JSONL file with exclusive lock
       def append_record(path, record)
-        FileUtils.touch(path) unless File.exist?(path)
-
         File.open(path, 'a') do |file|
           file.flock(File::LOCK_EX)
           file.puts(serialize_record(record))
@@ -62,11 +60,10 @@ module Eluent
       # Write records atomically using temp file + rename
       def write_records_atomically(path, records)
         temp_path = "#{path}.tmp"
+        lines = records.map { |record| serialize_record(record) }
+        content = lines.empty? ? '' : lines.join("\n") << "\n"
 
-        File.open(temp_path, 'w') do |file|
-          records.each { |record| file.puts(serialize_record(record)) }
-        end
-
+        File.write(temp_path, content)
         File.rename(temp_path, path)
       end
 

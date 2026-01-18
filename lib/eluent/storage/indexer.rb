@@ -15,19 +15,26 @@ module Eluent
         @bonds_by_source = Hash.new { |h, k| h[k] = [] }
         @bonds_by_target = Hash.new { |h, k| h[k] = [] }
         @comments_by_parent = Hash.new { |h, k| h[k] = [] }
+        @atom_sources = {}
       end
 
-      def index_atom(atom)
+      def index_atom(atom, source_file: nil)
         return unless atom&.id
 
         exact_index[atom.id] = atom
+        atom_sources[atom.id] = source_file if source_file
         index_atom_in_trie(atom)
+      end
+
+      def source_file_for(atom_id)
+        atom_sources[atom_id]
       end
 
       def remove_atom(atom)
         return unless atom&.id
 
         exact_index.delete(atom.id)
+        atom_sources.delete(atom.id)
         remove_atom_from_trie(atom)
       end
 
@@ -125,7 +132,7 @@ module Eluent
       end
 
       def clear
-        [exact_index, randomness_tries, bonds_by_source, bonds_by_target, comments_by_parent].each(&:clear)
+        [exact_index, randomness_tries, bonds_by_source, bonds_by_target, comments_by_parent, atom_sources].each(&:clear)
       end
 
       def rebuild(atoms: [], bonds: [], comments: [])
@@ -137,7 +144,7 @@ module Eluent
 
       private
 
-      attr_reader :exact_index, :randomness_tries, :bonds_by_source, :bonds_by_target, :comments_by_parent
+      attr_reader :exact_index, :randomness_tries, :bonds_by_source, :bonds_by_target, :comments_by_parent, :atom_sources
 
       def index_atom_in_trie(atom)
         with_atom_id_parts(atom.id) do |repo, randomness|
