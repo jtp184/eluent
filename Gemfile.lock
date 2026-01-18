@@ -42,7 +42,11 @@ GEM
     diff-lcs (1.6.2)
     drb (2.2.3)
     erb (6.0.1)
+    factory_bot (6.5.6)
+      activesupport (>= 6.1.0)
     fakefs (2.8.0)
+    faker (3.5.3)
+      i18n (>= 1.8.11, < 2)
     ffi (1.17.3)
     ffi (1.17.3-x86_64-linux-gnu)
     fileutils (1.8.0)
@@ -200,7 +204,9 @@ PLATFORMS
 
 DEPENDENCIES
   eluent!
+  factory_bot (~> 6.4)
   fakefs (~> 2.5)
+  faker (~> 3.4)
   irb
   rake (~> 13.0)
   rbs (~> 3.4)
@@ -227,7 +233,9 @@ CHECKSUMS
   drb (2.2.3) sha256=0b00d6fdb50995fe4a45dea13663493c841112e4068656854646f418fda13373
   eluent (0.1.0)
   erb (6.0.1) sha256=28ecdd99c5472aebd5674d6061e3c6b0a45c049578b071e5a52c2a7f13c197e5
+  factory_bot (6.5.6) sha256=12beb373214dccc086a7a63763d6718c49769d5606f0501e0a4442676917e077
   fakefs (2.8.0) sha256=85b42c2add1f7b8c7aebe602d48b296fe3c376eae7d716cd6a768d221efe8965
+  faker (3.5.3) sha256=b961482dc0bb15ccb9a98ea7878b925669e9ae8f5e59b607da540b768137d765
   ffi (1.17.3) sha256=0e9f39f7bb3934f77ad6feab49662be77e87eedcdeb2a3f5c0234c2938563d4c
   ffi (1.17.3-x86_64-linux-gnu) sha256=3746b01f677aae7b16dc1acb7cb3cc17b3e35bdae7676a3f568153fb0e2c887f
   fileutils (1.8.0) sha256=8c6b1df54e2540bdb2f39258f08af78853aa70bad52b4d394bbc6424593c6e02

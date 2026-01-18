@@ -12,6 +12,7 @@
 
 ## Ruby
 - Write modern, idiomatic Ruby code. Use newer language features where appropriate.
+- Use standard gems and tools, don't reinvent the wheel for common patterns with well established solutions.
 - One class or module per file. File names should match class/module names. Error subclasses can be grouped with their parent.
 - Use conventional mixins like `Enumerable`, `Forwardable`, and standard method names like `#succ`, `#call`, `#to_h`, etc. to integrate with other Ruby code cleanly.
 - Make apropriate use of inheritance and modules to promote code reuse. DRY! 

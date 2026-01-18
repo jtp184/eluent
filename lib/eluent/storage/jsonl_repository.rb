@@ -51,7 +51,7 @@ module Eluent
 
         self.config = config_loader.load
         load_data_files
-        self.id_resolver = Registry::IdResolver.new(indexer)
+        self.id_resolver = Registry::IdResolver.new(@indexer)
         self.loaded = true
         self
       end
@@ -278,14 +278,14 @@ module Eluent
         attrs[:id] ||= Registry::IdGenerator.generate_atom_id(repo_name)
         attrs[:priority] ||= config.dig('defaults', 'priority') || 2
         attrs[:issue_type] ||= config.dig('defaults', 'issue_type') || 'task'
-        Models::Atom.new(attrs)
+        Models::Atom.new(**attrs)
       end
 
       def regenerate_id_if_collision(atom, attrs)
         return atom unless @indexer.atom_exists?(atom.id)
 
         attrs[:id] = Registry::IdGenerator.generate_atom_id(repo_name)
-        Models::Atom.new(attrs)
+        Models::Atom.new(**attrs)
       end
 
       def file_containing_atom(atom_id)

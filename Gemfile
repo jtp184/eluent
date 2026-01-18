@@ -9,6 +9,8 @@ gem 'irb'
 gem 'rake', '~> 13.0'
 
 # Testing
+gem 'factory_bot', '~> 6.4'
+gem 'faker', '~> 3.4'
 gem 'fakefs', '~> 2.5'
 gem 'rspec', '~> 3.13'
 gem 'timecop', '~> 0.9'
