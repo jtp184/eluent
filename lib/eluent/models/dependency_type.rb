@@ -15,7 +15,7 @@ module Eluent
         duplicates: { blocking: false },
         discovered_from: { blocking: false },
         replies_to: { blocking: false }
-      }
+      }.freeze
 
       attr_reader :name, :blocking
 
@@ -30,6 +30,22 @@ module Eluent
 
       def ==(other)
         other.is_a?(DependencyType) && other.name == name
+      end
+
+      def eql?(other)
+        self == other
+      end
+
+      def hash
+        name.hash
+      end
+
+      def to_s
+        name.to_s
+      end
+
+      def to_sym
+        name
       end
     end
   end

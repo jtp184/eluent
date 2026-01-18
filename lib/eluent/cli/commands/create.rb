@@ -158,7 +158,7 @@ module Eluent
 
           description = prompt.ask('Description (optional):')
 
-          issue_type = prompt.select('Type:', Models::Atom::ISSUE_TYPES)
+          issue_type = prompt.select('Type:', Models::IssueType.all.keys.map(&:to_s))
 
           priority = prompt.slider('Priority:', min: 0, max: 5, default: 2)
 

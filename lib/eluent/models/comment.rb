@@ -51,9 +51,9 @@ module Eluent
       end
 
       # Unique hash for deduplication during sync
-      # Key: SHA256(author + created_at + content) -> 16-char hex prefix
+      # Key: SHA256(parent_id + author + created_at + content) -> 16-char hex prefix
       def dedup_key
-        data = "#{author}#{created_at&.iso8601}#{content}"
+        data = "#{parent_id}#{author}#{created_at&.iso8601}#{content}"
         Digest::SHA256.hexdigest(data)[0, 16]
       end
     end

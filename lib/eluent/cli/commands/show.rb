@@ -190,15 +190,18 @@ module Eluent
         end
 
         def format_dep_type(type)
+          type_str = type.to_s
           colors = {
             'blocks' => :red,
-            'parent-child' => :blue,
-            'conditional-blocks' => :yellow,
-            'waits-for' => :magenta,
+            'parent_child' => :blue,
+            'conditional_blocks' => :yellow,
+            'waits_for' => :magenta,
             'related' => :cyan,
-            'duplicates' => :dim
+            'duplicates' => :dim,
+            'discovered_from' => :green,
+            'replies_to' => :white
           }
-          @pastel.decorate("[#{type}]", colors[type] || :white)
+          @pastel.decorate("[#{type_str}]", colors[type_str] || :white)
         end
       end
     end

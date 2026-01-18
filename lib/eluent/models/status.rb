@@ -26,6 +26,22 @@ module Eluent
       def ==(other)
         other.is_a?(Status) && other.name == name
       end
+
+      def eql?(other)
+        self == other
+      end
+
+      def hash
+        name.hash
+      end
+
+      def to_s
+        name.to_s
+      end
+
+      def to_sym
+        name
+      end
     end
   end
 end

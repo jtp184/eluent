@@ -302,7 +302,7 @@ module Eluent
 
       def build_comment(parent_id:, author:, content:)
         existing_count = @indexer.comments_for(parent_id).size
-        comment_id = Registry::IdGenerator.generate_comment_id(parent_id, existing_count + 1)
+        comment_id = Registry::IdGenerator.generate_comment_id(atom_id: parent_id, index: existing_count + 1)
 
         Models::Comment.new(id: comment_id, parent_id: parent_id, author: author, content: content)
       end

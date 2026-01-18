@@ -124,7 +124,7 @@ module Eluent
         end
 
         def encode_base32(value, length)
-          ''.tap do |result|
+          String.new.tap do |result|
             length.times do
               result.prepend(ENCODING[value % ENCODING_LENGTH])
               value /= ENCODING_LENGTH
@@ -133,13 +133,11 @@ module Eluent
         end
 
         def decode_timestamp(timestamp_str)
-          0.then do |value|
-            timestamp_str.each_char do |char|
-              value *= (ENCODING_LENGTH + ENCODING.index(char.upcase))
-            end
-
-            Time.at(value / 1000.0).utc
+          ms = timestamp_str.each_char.reduce(0) do |value, char|
+            (value * ENCODING_LENGTH) + ENCODING.index(char.upcase)
           end
+
+          Time.at(ms / 1000.0).utc
         end
       end
     end

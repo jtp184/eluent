@@ -25,7 +25,7 @@ module Eluent
 
       def delete(key, value)
         find_node(normalize(key))&.delete(value).tap do |deleted|
-          self.count = count - 1 if deleted
+          self.count = count - 1 unless deleted.nil?
         end
       end
 

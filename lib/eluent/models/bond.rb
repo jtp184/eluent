@@ -4,6 +4,7 @@ module Eluent
   module Models
     # Dependency relationship between two atoms
     class Bond
+      include Validations
       extend Forwardable
 
       attr_accessor :source_id, :target_id, :dependency_type, :created_at, :metadata
@@ -23,7 +24,7 @@ module Eluent
         @created_at = parse_time(created_at)
         @metadata = metadata
 
-        validate_not_self_reference
+        validate_not_self_reference(source_id: source_id, target_id: target_id)
       end
 
       DependencyType.all.each do |dep_name, dep|
@@ -37,7 +38,7 @@ module Eluent
           _type: 'bond',
           source_id: source_id,
           target_id: target_id,
-          dependency_type: dependency_type,
+          dependency_type: dependency_type.to_s,
           created_at: created_at&.iso8601,
           metadata: metadata
         }
