@@ -51,6 +51,7 @@ require_relative 'eluent/sync/pull_first_orchestrator'
 
 # Registry extensions
 require_relative 'eluent/registry/repo_registry'
+require_relative 'eluent/registry/repo_context'
 
 # Daemon
 require_relative 'eluent/daemon/protocol'
