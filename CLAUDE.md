@@ -39,5 +39,9 @@
   - Handling errors
     - Prefer top-level `rescue` clauses for error handling.
 
+## RSpec & Rubocop
+- Exercise control over the test environment with gems like `Timecop`, `FakeFS`, and `WebMock` to isolate tests from and document external dependencies.
+- Follow the linter's guidance. Ignore rubocop rules only as a last resort, and always with a comment explaining why.
+
 ## Git & Github
 - Use the `pull_request_template.md` template for PR descriptions. Fill out all sections.
