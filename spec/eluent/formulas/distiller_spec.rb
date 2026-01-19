@@ -112,6 +112,30 @@ RSpec.describe Eluent::Formulas::Distiller do
         expect(formula.variables).to have_key('feature_name')
         expect(formula.variables['feature_name'].required?).to be true
       end
+
+      it 'handles overlapping mappings by replacing longest first' do
+        # Create atom with title containing both "Auth" and "Authentication"
+        auth_atom = repository.create_atom(
+          title: 'Authentication Module',
+          description: 'Auth system for the app',
+          issue_type: :epic
+        )
+        repository.create_atom(title: 'Setup', parent_id: auth_atom.id)
+
+        formula = distiller.distill(
+          auth_atom.id,
+          formula_id: 'overlapping-test',
+          variable_mappings: {
+            'Auth' => 'short',
+            'Authentication' => 'full'
+          }
+        )
+
+        # "Authentication" should be replaced with {{full}}, not "{{short}}entication"
+        expect(formula.title).to eq('{{full}} Module')
+        # "Auth" in description should be replaced with {{short}}
+        expect(formula.description).to eq('{{short}} system for the app')
+      end
     end
 
     it 'raises error when root atom not found' do

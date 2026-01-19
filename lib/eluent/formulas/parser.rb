@@ -138,12 +138,13 @@ module Eluent
       def validate_step_dependencies(steps, formula_id)
         step_ids = steps.map.with_index { |s, i| s['id'] || "step-#{i + 1}" }
 
-        steps.each do |step|
+        steps.each_with_index do |step, idx|
+          step_id = step['id'] || "step-#{idx + 1}"
           Array(step['depends_on']).each do |dep_id|
             next if step_ids.include?(dep_id)
 
             raise ParseError.new(
-              "Step '#{step['id']}' depends on unknown step '#{dep_id}'",
+              "Step '#{step_id}' depends on unknown step '#{dep_id}'",
               formula_id: formula_id
             )
           end

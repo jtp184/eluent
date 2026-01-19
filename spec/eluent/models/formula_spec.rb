@@ -180,6 +180,11 @@ RSpec.describe Eluent::Models::Variable do
     it 'compiles pattern as Regexp' do
       expect(pattern_var.pattern).to be_a(Regexp)
     end
+
+    it 'raises ValidationError for invalid regex pattern' do
+      expect { described_class.new(name: 'bad', pattern: '[invalid') }
+        .to raise_error(Eluent::Models::ValidationError, /invalid pattern for variable 'bad'/)
+    end
   end
 
   describe '#required?' do

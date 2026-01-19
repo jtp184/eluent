@@ -149,7 +149,13 @@ module Eluent
         @required = required
         @default = default
         @enum = enum&.map(&:to_s)
-        @pattern = pattern ? Regexp.new(pattern) : nil
+        @pattern = pattern ? build_pattern(pattern) : nil
+      end
+
+      private def build_pattern(pattern)
+        Regexp.new(pattern)
+      rescue RegexpError => e
+        raise ValidationError, "invalid pattern for variable '#{@name}': #{e.message}"
       end
 
       # A variable is only truly required if marked required AND has no default.

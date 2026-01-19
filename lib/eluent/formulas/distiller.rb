@@ -102,7 +102,10 @@ module Eluent
         return text unless text.is_a?(String)
 
         result = text.dup
-        mappings.each do |literal_value, var_name|
+        # Sort by key length descending to avoid overlapping replacements
+        # (e.g., "Authentication" before "Auth")
+        sorted_mappings = mappings.sort_by { |literal_value, _| -literal_value.to_s.length }
+        sorted_mappings.each do |literal_value, var_name|
           result = result.gsub(literal_value.to_s, "{{#{var_name}}}")
         end
         result

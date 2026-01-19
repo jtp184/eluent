@@ -102,6 +102,38 @@ RSpec.describe Eluent::Compaction::Summarizer do
         expect(summary).to include('Discussion highlights')
       end
     end
+
+    context 'with nil author' do
+      before do
+        comment = repository.create_comment(parent_id: atom.id, author: nil, content: 'Anonymous comment')
+        # Force nil author since create_comment might set a default
+        comment.author = nil
+      end
+
+      it 'uses unknown for nil author in highlights' do
+        summary = summarizer.summarize_comments(atom)
+        expect(summary).to include('unknown:')
+      end
+    end
+
+    context 'with two comments having same timestamp' do
+      let(:same_time) { Time.now.utc }
+
+      before do
+        c1 = repository.create_comment(parent_id: atom.id, author: 'alice', content: 'First')
+        c2 = repository.create_comment(parent_id: atom.id, author: 'bob', content: 'Second')
+        # Force same timestamp
+        c1.created_at = same_time
+        c2.created_at = same_time
+      end
+
+      it 'does not duplicate highlights for same-timestamp comments' do
+        summary = summarizer.summarize_comments(atom)
+        # Count the number of highlight lines (lines starting with "- ")
+        highlight_lines = summary.lines.select { |l| l.strip.start_with?('- ') }
+        expect(highlight_lines.size).to eq(1)
+      end
+    end
   end
 
   describe '#generate_compaction_summary' do

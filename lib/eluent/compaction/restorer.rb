@@ -38,7 +38,7 @@ module Eluent
         RestorationResult.new(
           atom_id: atom.id,
           restored_description_length: atom.description&.length || 0,
-          restored_comment_count: historical_data[:comments].size
+          restored_comment_count: historical_data[:comments]&.size || 0
         )
       end
 
@@ -73,7 +73,7 @@ module Eluent
           },
           restored: {
             description_length: historical_data[:description]&.length || 0,
-            comment_count: historical_data[:comments].size
+            comment_count: historical_data[:comments]&.size || 0
           },
           commit: historical_data[:commit]
         }
@@ -197,7 +197,7 @@ module Eluent
           repository.create_comment(
             parent_id: atom_id,
             author: comment_data[:author] || 'restored',
-            content: comment_data[:content]
+            content: comment_data[:content] || '[restored]'
           )
         end
       end

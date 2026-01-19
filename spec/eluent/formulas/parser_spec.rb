@@ -150,6 +150,25 @@ RSpec.describe Eluent::Formulas::Parser, :filesystem do
           .to raise_error(Eluent::Formulas::ParseError, /depends on unknown step/)
       end
     end
+
+    context 'when unnamed step depends on unknown step' do
+      before do
+        write_formula('unnamed-bad-dep', <<~YAML)
+          id: unnamed-bad-dep
+          title: Unnamed Bad Dependency
+          steps:
+            - title: First Step
+            - title: Second Step
+              depends_on:
+                - nonexistent
+        YAML
+      end
+
+      it 'uses generated step ID in error message' do
+        expect { parser.parse('unnamed-bad-dep') }
+          .to raise_error(Eluent::Formulas::ParseError, /Step 'step-2' depends on unknown step/)
+      end
+    end
   end
 
   describe '#list' do
