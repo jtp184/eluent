@@ -34,7 +34,7 @@ module Eluent
       end
 
       def remote?(remote: 'origin')
-        run_git('remote', 'get-url', remote, allow_failure: true)
+        run_git('remote', 'get-url', remote)
         true
       rescue GitError
         false
@@ -45,7 +45,7 @@ module Eluent
       end
 
       def file_exists_at_commit?(commit:, path:)
-        run_git('cat-file', '-e', "#{commit}:#{path}", allow_failure: true)
+        run_git('cat-file', '-e', "#{commit}:#{path}")
         true
       rescue GitError
         false
