@@ -89,7 +89,7 @@ module Eluent
 
       def apply_with_rollback(merge_result, pull_only:, force:, remote_head:)
         data_path = repository.paths.data_file
-        backup_path = "#{data_path.chomp('/')}.backup"
+        backup_path = "#{data_path}.backup"
         local_state = load_current_state
 
         FileUtils.cp(data_path, backup_path) if File.exist?(data_path)

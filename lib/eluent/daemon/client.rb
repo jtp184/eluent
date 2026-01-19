@@ -94,7 +94,11 @@ module Eluent
       attr_reader :socket
 
       def default_socket_path
-        File.expand_path('~/.eluent/daemon.sock')
+        base_dir = File.join(Dir.home, '.eluent')
+        File.join(base_dir, 'daemon.sock')
+      rescue ArgumentError
+        # Dir.home raises ArgumentError if HOME is not set
+        File.join('/tmp/eluent', 'daemon.sock')
       end
     end
 

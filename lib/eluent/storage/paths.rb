@@ -31,6 +31,9 @@ module Eluent
         File.exist?(data_file)
       end
 
+      # Backward-compatible alias
+      alias initialized? data_file_exists?
+
       def ephemeral_exists?
         File.exist?(ephemeral_file)
       end

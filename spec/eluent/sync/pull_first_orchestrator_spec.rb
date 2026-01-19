@@ -284,8 +284,6 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
       end
 
       it 'restores backup on failure' do
-        File.read(paths.data_file)
-
         expect { orchestrator.sync }.to raise_error(StandardError, 'Commit failed')
 
         expect(File.read(paths.data_file)).to include('Original')

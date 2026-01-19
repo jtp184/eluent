@@ -68,8 +68,11 @@ module Eluent
       end
 
       def selectable?(io)
-        io.respond_to?(:to_io)
-      rescue IOError
+        return false unless io.respond_to?(:to_io)
+
+        real_io = io.to_io
+        real_io.is_a?(IO) && !real_io.closed?
+      rescue IOError, TypeError
         false
       end
 
@@ -136,12 +139,7 @@ module Eluent
 
       # Build a success response
       def build_success(id:, data: nil)
-        response = {
-          id: id,
-          status: 'ok'
-        }
-        response[:data] = data if data
-        response
+        { id: id, status: 'ok' }.tap { |r| r[:data] = data if data }
       end
 
       # Build an error response
