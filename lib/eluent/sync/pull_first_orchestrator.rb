@@ -57,7 +57,17 @@ module Eluent
         # Apply merged result
         apply_merge_result(merge_result)
 
-        # Update sync state
+        # Push if not pull_only (before saving sync state - if push fails, state should not update)
+        commits = []
+        unless pull_only
+          unless git_adapter.clean?
+            commit_hash = commit_changes(force: force)
+            commits << commit_hash if commit_hash
+            git_adapter.push
+          end
+        end
+
+        # Update sync state only after successful push
         new_local_head = git_adapter.current_commit
         sync_state.update(
           last_sync_at: Time.now.utc,
@@ -65,18 +75,6 @@ module Eluent
           local_head: new_local_head,
           remote_head: remote_head
         ).save
-
-        # Push if not pull_only
-        commits = []
-        unless pull_only
-          if git_adapter.clean?
-            # No local changes to push
-          else
-            commit_hash = commit_changes(force: force)
-            commits << commit_hash if commit_hash
-            git_adapter.push
-          end
-        end
 
         SyncResult.new(
           status: merge_result.conflicts.any? ? :conflicted : :success,
@@ -140,8 +138,8 @@ module Eluent
           when 'comment'
             comments << Storage::Serializers::CommentSerializer.deserialize(data)
           end
-        rescue JSON::ParserError
-          # Skip malformed lines
+        rescue JSON::ParserError => e
+          warn "el: warning: skipping malformed JSON line during sync: #{e.message}"
         end
 
         { atoms: atoms.compact, bonds: bonds.compact, comments: comments.compact }

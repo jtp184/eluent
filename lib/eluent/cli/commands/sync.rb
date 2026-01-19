@@ -48,8 +48,8 @@ module Eluent
           end
 
           ensure_initialized!
-          ensure_git_repo!
-          ensure_remote!
+          return 1 unless ensure_git_repo!
+          return 1 unless ensure_remote!
 
           orchestrator = build_orchestrator
 
@@ -66,17 +66,15 @@ module Eluent
         private
 
         def ensure_git_repo!
-          return if repository.paths.git_repo?
+          return true if repository.paths.git_repo?
 
           error('NO_GIT_REPO', 'Not a git repository')
-          exit 1
         end
 
         def ensure_remote!
-          return if git_adapter.has_remote?
+          return true if git_adapter.has_remote?
 
           error('NO_REMOTE', 'No git remote configured. Add a remote with: git remote add origin <url>')
-          exit 1
         end
 
         def build_orchestrator
@@ -146,6 +144,7 @@ module Eluent
                    when :added then @pastel.green('+')
                    when :removed then @pastel.red('-')
                    when :modified then @pastel.yellow('~')
+                   else '?'
                    end
             puts "  #{icon} #{change[:record_type]}: #{change[:title] || change[:id]}"
           end

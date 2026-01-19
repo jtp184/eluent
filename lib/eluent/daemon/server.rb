@@ -235,11 +235,7 @@ module Eluent
 
         # Force close remaining clients
         mutex.synchronize do
-          clients.each do |c|
-            c.close
-          rescue StandardError
-            nil
-          end
+          clients.each { |c| c.close rescue nil }
           clients.clear
         end
 

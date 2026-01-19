@@ -35,11 +35,13 @@ module Eluent
 
       # Comment deduplication using existing Comment#dedup_key
       # Keeps earliest by created_at when duplicates found
+      # Keeps earliest by created_at when duplicates found
+      # Uses epoch as fallback for nil created_at for deterministic ordering
       def deduplicate_comments(comments)
         comments
           .group_by(&:dedup_key)
           .values
-          .map { |group| group.min_by { |c| c.created_at || Time.now.utc } }
+          .map { |group| group.min_by { |c| c.created_at || Time.at(0).utc } }
       end
 
       # Bond deduplication by (source_id, target_id, dependency_type)

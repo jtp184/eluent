@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'fileutils'
 require 'json'
 require 'time'
 
@@ -30,6 +31,7 @@ module Eluent
       end
 
       def save
+        FileUtils.mkdir_p(File.dirname(sync_state_file))
         File.write(sync_state_file, JSON.pretty_generate(to_h) << "\n")
         self
       end

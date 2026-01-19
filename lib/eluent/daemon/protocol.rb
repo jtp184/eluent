@@ -30,10 +30,8 @@ module Eluent
       # Read and parse a message from IO
       def decode(io)
         # Read length prefix
-        length_bytes = io.read(LENGTH_PREFIX_SIZE)
-        return nil if length_bytes.nil? || length_bytes.empty?
-
-        raise ProtocolError, 'Incomplete length prefix' if length_bytes.bytesize < LENGTH_PREFIX_SIZE
+        length_bytes = read_exact(io, LENGTH_PREFIX_SIZE, error_message: 'Incomplete length prefix')
+        return nil if length_bytes.nil?
 
         length = length_bytes.unpack1(LENGTH_PREFIX_FORMAT)
 
@@ -43,12 +41,36 @@ module Eluent
         end
 
         # Read message body
-        json = io.read(length)
-        raise ProtocolError, 'Incomplete message body' if json.nil? || json.bytesize < length
+        json = read_exact(io, length, error_message: 'Incomplete message body')
+        raise ProtocolError, 'Incomplete message body' if json.nil?
 
         JSON.parse(json, symbolize_names: true)
       rescue JSON::ParserError => e
         raise ProtocolError, "Invalid JSON: #{e.message}"
+      end
+
+      # Read exactly n bytes from IO, handling partial reads
+      # Returns nil for empty stream, raises ProtocolError for partial reads
+      def read_exact(io, bytes_needed, error_message: 'Incomplete read')
+        buffer = String.new(encoding: Encoding::BINARY)
+
+        while buffer.bytesize < bytes_needed
+          remaining = bytes_needed - buffer.bytesize
+          chunk = io.read(remaining)
+
+          # EOF reached
+          if chunk.nil? || chunk.empty?
+            # If we haven't read anything, return nil (clean EOF)
+            return nil if buffer.empty?
+
+            # If we have partial data, raise error (truncated message)
+            raise ProtocolError, error_message
+          end
+
+          buffer << chunk
+        end
+
+        buffer
       end
 
       # Build a request message
