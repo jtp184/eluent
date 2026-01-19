@@ -10,7 +10,7 @@ module Eluent
     class Application
       include TTY::Option
 
-      COMMANDS = %w[init create list show update close reopen config ready dep comment discard sync daemon].freeze
+      COMMANDS = %w[init create list show update close reopen config ready dep comment discard sync daemon formula].freeze
 
       ERROR_CODES = {
         Storage::RepositoryNotFoundError => 'REPO_NOT_FOUND',
@@ -27,16 +27,22 @@ module Eluent
         Daemon::NotRunningError => 'DAEMON_NOT_RUNNING',
         Daemon::ProtocolError => 'PROTOCOL_ERROR',
         Daemon::ConnectionError => 'CONNECTION_ERROR',
-        Daemon::TimeoutError => 'TIMEOUT'
+        Daemon::TimeoutError => 'TIMEOUT',
+        Formulas::FormulaNotFoundError => 'NOT_FOUND',
+        Formulas::ParseError => 'PARSE_ERROR',
+        Formulas::VariableError => 'VALIDATION_ERROR',
+        Compaction::CompactionError => 'COMPACTION_ERROR',
+        Compaction::RestoreError => 'RESTORE_ERROR'
       }.freeze
 
       EXIT_CODES = {
         'REPO_NOT_FOUND' => 3, 'NOT_FOUND' => 3,
         'REPO_EXISTS' => 4, 'AMBIGUOUS_ID' => 4, 'SELF_REFERENCE' => 4, 'CYCLE_DETECTED' => 4,
-        'VALIDATION_ERROR' => 2, 'INVALID_TRANSITION' => 2,
+        'VALIDATION_ERROR' => 2, 'INVALID_TRANSITION' => 2, 'PARSE_ERROR' => 2,
         'GIT_ERROR' => 5, 'NO_REMOTE' => 5,
         'DAEMON_RUNNING' => 6, 'DAEMON_NOT_RUNNING' => 6, 'PROTOCOL_ERROR' => 6,
-        'CONNECTION_ERROR' => 7, 'TIMEOUT' => 7
+        'CONNECTION_ERROR' => 7, 'TIMEOUT' => 7,
+        'COMPACTION_ERROR' => 8, 'RESTORE_ERROR' => 8
       }.freeze
 
       usage do

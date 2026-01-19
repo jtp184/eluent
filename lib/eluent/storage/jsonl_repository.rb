@@ -215,6 +215,28 @@ module Eluent
         indexer.comments_for(atom_id)
       end
 
+      def compact_comments(atom_id, summary)
+        ensure_loaded!
+
+        existing_comments = indexer.comments_for(atom_id)
+        return if existing_comments.empty? && summary.nil?
+
+        target_file = file_containing_atom(atom_id)
+
+        # Remove all existing comments for this atom
+        FileOperations.rewrite_file(target_file) do |records|
+          records.reject { |record| record[:_type] == 'comment' && record[:parent_id] == atom_id }
+        end
+
+        # Remove from indexer
+        existing_comments.each { |comment| indexer.remove_comment(comment) }
+
+        # Add summary comment if provided
+        return unless summary
+
+        create_comment(parent_id: atom_id, author: 'system', content: summary)
+      end
+
       # --- Ephemeral Operations ---
 
       def persist_atom(atom_id)
