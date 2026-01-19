@@ -142,5 +142,48 @@ RSpec.describe Eluent::Formulas::Distiller do
       expect { distiller.distill('nonexistent', formula_id: 'test') }
         .to raise_error(Eluent::Registry::IdNotFoundError)
     end
+
+    it 'raises error when root atom has no children' do
+      lonely_atom = repository.create_atom(title: 'Lonely', issue_type: :epic)
+      expect { distiller.distill(lonely_atom.id, formula_id: 'test') }
+        .to raise_error(Eluent::Formulas::ParseError, /no children found/)
+    end
+
+    context 'with duplicate titles causing slugify collision' do
+      let!(:collision_root) do
+        repository.create_atom(title: 'Collision Test', issue_type: :epic)
+      end
+
+      let!(:child1) do
+        repository.create_atom(
+          title: 'Hello World',
+          parent_id: collision_root.id
+        )
+      end
+
+      let!(:child2) do
+        repository.create_atom(
+          title: 'Hello-World',
+          parent_id: collision_root.id
+        )
+      end
+
+      let!(:child3) do
+        repository.create_atom(
+          title: 'Hello World',
+          parent_id: collision_root.id
+        )
+      end
+
+      it 'generates unique step IDs for colliding slugs' do
+        formula = distiller.distill(collision_root.id, formula_id: 'collision-test')
+        step_ids = formula.steps.map(&:id)
+
+        expect(step_ids.uniq.size).to eq(step_ids.size)
+        expect(step_ids).to include('hello-world')
+        expect(step_ids).to include('hello-world-2')
+        expect(step_ids).to include('hello-world-3')
+      end
+    end
   end
 end

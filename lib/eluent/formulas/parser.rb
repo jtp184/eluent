@@ -137,24 +137,85 @@ module Eluent
 
       def validate_step_dependencies(steps, formula_id)
         step_ids = steps.map.with_index { |s, i| s['id'] || "step-#{i + 1}" }
+        dependency_graph = build_step_dependency_graph(steps, step_ids)
 
         steps.each_with_index do |step, idx|
           step_id = step['id'] || "step-#{idx + 1}"
           Array(step['depends_on']).each do |dep_id|
-            next if step_ids.include?(dep_id)
-
-            raise ParseError.new(
-              "Step '#{step_id}' depends on unknown step '#{dep_id}'",
-              formula_id: formula_id
-            )
+            validate_dependency_exists(step_id, dep_id, step_ids, formula_id)
+            validate_no_self_dependency(step_id, dep_id, formula_id)
           end
         end
+
+        validate_no_cycles(dependency_graph, step_ids, formula_id)
+      end
+
+      def build_step_dependency_graph(steps, step_ids)
+        steps.each_with_index.to_h do |step, idx|
+          step_id = step['id'] || "step-#{idx + 1}"
+          deps = Array(step['depends_on']).select { |d| step_ids.include?(d) }
+          [step_id, deps]
+        end
+      end
+
+      def validate_dependency_exists(step_id, dep_id, step_ids, formula_id)
+        return if step_ids.include?(dep_id)
+
+        raise ParseError.new(
+          "Step '#{step_id}' depends on unknown step '#{dep_id}'",
+          formula_id: formula_id
+        )
+      end
+
+      def validate_no_self_dependency(step_id, dep_id, formula_id)
+        return unless step_id == dep_id
+
+        raise ParseError.new(
+          "Step '#{step_id}' cannot depend on itself",
+          formula_id: formula_id
+        )
+      end
+
+      def validate_no_cycles(graph, step_ids, formula_id)
+        visited = {}
+        rec_stack = {}
+
+        step_ids.each do |step_id|
+          cycle = detect_cycle(step_id, graph, visited, rec_stack, [])
+          next unless cycle
+
+          raise ParseError.new(
+            "Circular dependency detected: #{cycle.join(' -> ')}",
+            formula_id: formula_id
+          )
+        end
+      end
+
+      def detect_cycle(node, graph, visited, rec_stack, path)
+        return nil if visited[node]
+
+        visited[node] = true
+        rec_stack[node] = true
+        current_path = path + [node]
+
+        graph[node]&.each do |dep|
+          return current_path + [dep] if rec_stack[dep]
+
+          cycle = detect_cycle(dep, graph, visited, rec_stack, current_path)
+          return cycle if cycle
+        end
+
+        rec_stack[node] = false
+        nil
       end
 
       def parse_variables(variables_hash)
         variables_hash.to_h do |name, attrs|
+          name_str = name.to_s
+          raise ParseError, 'Variable name cannot be blank' if name_str.strip.empty?
+
           attrs ||= {}
-          [name.to_s, attrs.transform_keys(&:to_sym)]
+          [name_str, attrs.transform_keys(&:to_sym)]
         end
       end
 

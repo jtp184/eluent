@@ -19,6 +19,8 @@ module Eluent
     #   Use for workflows with mutually exclusive paths (e.g., "hotfix" vs "feature" release).
     class Composer
       COMPOSITION_TYPES = %i[sequential parallel conditional].freeze
+      # Use :: as delimiter to avoid collision with formula/variable IDs that use -
+      PREFIX_DELIMITER = '::'
 
       def initialize(parser:)
         @parser = parser
@@ -44,6 +46,13 @@ module Eluent
         raise ParseError, 'At least two formulas required for composition' if formulas.size < 2
         raise ParseError, "Invalid composition type: #{type}" unless COMPOSITION_TYPES.include?(type.to_sym)
 
+        # Check for duplicate formula IDs
+        formula_ids = formulas.map(&:id)
+        duplicate_ids = formula_ids.select { |id| formula_ids.count(id) > 1 }.uniq
+        unless duplicate_ids.empty?
+          raise ParseError, "Cannot compose same formula multiple times: #{duplicate_ids.join(', ')}"
+        end
+
         # Check for variable name conflicts
         all_vars = formulas.flat_map { |f| f.variables.keys }
         duplicates = all_vars.select { |v| all_vars.count(v) > 1 }.uniq
@@ -58,7 +67,7 @@ module Eluent
         prev_last_step_id = nil
 
         formulas.each do |formula|
-          prefix = "#{formula.id}-"
+          prefix = "#{formula.id}#{PREFIX_DELIMITER}"
           merged_variables.merge!(prefix_variables(formula.variables, prefix))
           merged_steps.concat(sequential_steps(formula, prefix, prev_last_step_id))
           prev_last_step_id = "#{prefix}#{formula.steps.last.id}" if formula.steps.any?
@@ -107,7 +116,7 @@ module Eluent
         steps = []
         variables = {}
         formulas.each do |formula|
-          prefix = "#{formula.id}-"
+          prefix = "#{formula.id}#{PREFIX_DELIMITER}"
           variables.merge!(prefix_variables(formula.variables, prefix))
           formula.steps.each { |step| steps << prefix_step(step, prefix) }
         end
@@ -118,7 +127,7 @@ module Eluent
         steps = []
         variables = { 'branch' => branch_variable(formulas) }
         formulas.each do |formula|
-          prefix = "#{formula.id}-"
+          prefix = "#{formula.id}#{PREFIX_DELIMITER}"
           variables.merge!(prefix_variables(formula.variables, prefix))
           formula.steps.each { |step| steps << conditional_step(step, prefix, formula.id) }
         end
@@ -154,9 +163,11 @@ module Eluent
       end
 
       def prefix_variables(variables, prefix)
+        # Extract formula ID from prefix (remove trailing delimiter)
+        formula_id = prefix.chomp(PREFIX_DELIMITER)
         variables.to_h do |name, var|
           prefixed_name = "#{prefix}#{name}"
-          attrs = var.to_h.merge(description: "[#{prefix[0..-2]}] #{var.description || name}")
+          attrs = var.to_h.merge(description: "[#{formula_id}] #{var.description || name}")
           [prefixed_name, attrs]
         end
       end

@@ -98,7 +98,10 @@ module Eluent
         return nil unless compacted_at
 
         # Search git history for the data file before compaction
-        data_file_relative = '.eluent/data.jsonl'
+        data_file_relative = File.join(
+          Storage::Paths::ELUENT_DIR,
+          Storage::Paths::DATA_FILE
+        )
         commits = find_commits_before(compacted_at, data_file_relative)
 
         commits.each do |commit|
@@ -159,7 +162,8 @@ module Eluent
 
             case record[:_type]
             when 'atom'
-              atom_data = record if record[:id] == atom_id
+              # Use first match (chronologically earlier in file is canonical)
+              atom_data ||= record if record[:id] == atom_id
             when 'comment'
               comments << record if record[:parent_id] == atom_id
             end

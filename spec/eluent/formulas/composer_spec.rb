@@ -62,23 +62,23 @@ RSpec.describe Eluent::Formulas::Composer, :filesystem do
         result = composer.compose(%w[design implement], new_id: 'combined', type: :sequential)
 
         step_ids = result.steps.map(&:id)
-        expect(step_ids).to include('design-research', 'design-spec', 'implement-code', 'implement-test')
+        expect(step_ids).to include('design::research', 'design::spec', 'implement::code', 'implement::test')
       end
 
       it 'creates sequential dependency between formulas' do
         result = composer.compose(%w[design implement], new_id: 'combined', type: :sequential)
 
         # First step of implement should depend on last step of design
-        code_step = result.steps.find { |s| s.id == 'implement-code' }
-        expect(code_step.depends_on).to include('design-spec')
+        code_step = result.steps.find { |s| s.id == 'implement::code' }
+        expect(code_step.depends_on).to include('design::spec')
       end
 
       it 'merges variables with prefixes' do
         result = composer.compose(%w[design implement], new_id: 'combined', type: :sequential)
 
-        expect(result.variables).to have_key('design-name')
-        expect(result.variables).to have_key('implement-name')
-        expect(result.variables).to have_key('implement-language')
+        expect(result.variables).to have_key('design::name')
+        expect(result.variables).to have_key('implement::name')
+        expect(result.variables).to have_key('implement::language')
       end
 
       it 'stores composition metadata' do
@@ -94,8 +94,8 @@ RSpec.describe Eluent::Formulas::Composer, :filesystem do
         result = composer.compose(%w[design implement], new_id: 'parallel', type: :parallel)
 
         # First step of implement should NOT depend on design steps
-        code_step = result.steps.find { |s| s.id == 'implement-code' }
-        expect(code_step.depends_on).not_to include('design-spec')
+        code_step = result.steps.find { |s| s.id == 'implement::code' }
+        expect(code_step.depends_on).not_to include('design::spec')
         expect(code_step.depends_on).to be_empty
       end
 
@@ -119,10 +119,10 @@ RSpec.describe Eluent::Formulas::Composer, :filesystem do
       it 'adds condition labels to steps' do
         result = composer.compose(%w[design implement], new_id: 'conditional', type: :conditional)
 
-        design_step = result.steps.find { |s| s.id == 'design-research' }
+        design_step = result.steps.find { |s| s.id == 'design::research' }
         expect(design_step.labels).to include('condition:branch=design')
 
-        implement_step = result.steps.find { |s| s.id == 'implement-code' }
+        implement_step = result.steps.find { |s| s.id == 'implement::code' }
         expect(implement_step.labels).to include('condition:branch=implement')
       end
     end
@@ -144,6 +144,11 @@ RSpec.describe Eluent::Formulas::Composer, :filesystem do
       it 'raises error for invalid composition type' do
         expect { composer.compose(%w[design implement], new_id: 'invalid', type: :unknown) }
           .to raise_error(Eluent::Formulas::ParseError, /Invalid composition type/)
+      end
+
+      it 'raises error when same formula is used multiple times' do
+        expect { composer.compose(%w[design design], new_id: 'duplicate', type: :sequential) }
+          .to raise_error(Eluent::Formulas::ParseError, /Cannot compose same formula multiple times/)
       end
     end
   end

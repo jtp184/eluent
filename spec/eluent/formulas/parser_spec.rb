@@ -169,6 +169,72 @@ RSpec.describe Eluent::Formulas::Parser, :filesystem do
           .to raise_error(Eluent::Formulas::ParseError, /Step 'step-2' depends on unknown step/)
       end
     end
+
+    context 'when step depends on itself' do
+      before do
+        write_formula('self-dep', <<~YAML)
+          id: self-dep
+          title: Self Dependency
+          steps:
+            - id: step1
+              title: Step
+              depends_on:
+                - step1
+        YAML
+      end
+
+      it 'raises ParseError for self-referential dependency' do
+        expect { parser.parse('self-dep') }
+          .to raise_error(Eluent::Formulas::ParseError, /cannot depend on itself/)
+      end
+    end
+
+    context 'when steps form a circular dependency' do
+      before do
+        write_formula('circular', <<~YAML)
+          id: circular
+          title: Circular Dependency
+          steps:
+            - id: step1
+              title: First
+              depends_on:
+                - step3
+            - id: step2
+              title: Second
+              depends_on:
+                - step1
+            - id: step3
+              title: Third
+              depends_on:
+                - step2
+        YAML
+      end
+
+      it 'raises ParseError for circular dependency' do
+        expect { parser.parse('circular') }
+          .to raise_error(Eluent::Formulas::ParseError, /Circular dependency detected/)
+      end
+    end
+
+    context 'when variable name is blank' do
+      before do
+        write_formula('blank-var', <<~YAML)
+          id: blank-var
+          title: Blank Variable
+          variables:
+            "  ":
+              required: true
+          steps:
+            - id: step1
+              title: Step
+        YAML
+      end
+
+      it 'raises ParseError for blank variable name' do
+        expect { parser.parse('blank-var') }
+          .to raise_error(Eluent::Formulas::ParseError, /Variable name cannot be blank/)
+      end
+    end
   end
 
   describe '#list' do

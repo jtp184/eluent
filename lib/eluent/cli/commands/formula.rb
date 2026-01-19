@@ -268,6 +268,8 @@ module Eluent
         def parse_variables
           Array(params[:var]).to_h do |var_str|
             key, value = var_str.split('=', 2)
+            raise Eluent::Error, "Invalid variable format '#{var_str}': expected 'name=value'" unless key && value
+
             [key, value]
           end
         end
@@ -276,6 +278,10 @@ module Eluent
           # For distill: --extract "v2.0=version" means replace "v2.0" with {{version}}
           Array(params[:extract]).to_h do |mapping_str|
             literal, var_name = mapping_str.split('=', 2)
+            unless literal && var_name
+              raise Eluent::Error, "Invalid extract format '#{mapping_str}': expected 'literal=varname'"
+            end
+
             [literal, var_name]
           end
         end

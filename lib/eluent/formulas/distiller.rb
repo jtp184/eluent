@@ -19,9 +19,11 @@ module Eluent
         raise Registry::IdNotFoundError, root_atom_id unless root
 
         children = find_children(root.id)
+        raise ParseError, "Cannot distill formula from atom '#{root_atom_id}': no children found" if children.empty?
+
         graph = build_dependency_graph(root.id, children)
 
-        steps = children.map { |child| build_step(child, graph, literal_to_var_map) }
+        steps = build_steps_with_unique_ids(children, graph, literal_to_var_map)
         variables = build_variable_definitions(literal_to_var_map)
 
         Models::Formula.new(
@@ -45,6 +47,39 @@ module Eluent
 
       def find_children(parent_id)
         repository.indexer.children_of(parent_id)
+      end
+
+      def build_steps_with_unique_ids(children, graph, literal_to_var_map)
+        used_ids = {}
+        children.map do |child|
+          step = build_step(child, graph, literal_to_var_map)
+          unique_id = ensure_unique_id(step.id, used_ids)
+          used_ids[unique_id] = true
+
+          # Return step with unique ID if needed
+          if unique_id == step.id
+            step
+          else
+            Models::Step.new(
+              id: unique_id,
+              title: step.title,
+              issue_type: step.issue_type,
+              description: step.description,
+              depends_on: step.depends_on,
+              assignee: step.assignee,
+              priority: step.priority,
+              labels: step.labels
+            )
+          end
+        end
+      end
+
+      def ensure_unique_id(base_id, used_ids)
+        return base_id unless used_ids.key?(base_id)
+
+        counter = 2
+        counter += 1 while used_ids.key?("#{base_id}-#{counter}")
+        "#{base_id}-#{counter}"
       end
 
       def build_dependency_graph(root_id, children)
