@@ -11,6 +11,7 @@ module Eluent
       LENGTH_PREFIX_FORMAT = 'N' # 4-byte big-endian uint32
       LENGTH_PREFIX_SIZE = 4
       MAX_MESSAGE_SIZE = 10 * 1024 * 1024 # 10MB
+      DEFAULT_READ_TIMEOUT = 30 # seconds
 
       module_function
 
@@ -36,9 +37,9 @@ module Eluent
       # This allows the server to distinguish between:
       # - Normal disconnection (nil return, handled silently)
       # - Protocol violation (exception, may warrant logging)
-      def decode(io)
+      def decode(io, timeout: DEFAULT_READ_TIMEOUT)
         # Read length prefix - nil means clean EOF (client disconnected)
-        length_bytes = read_exact(io, LENGTH_PREFIX_SIZE, error_message: 'Incomplete length prefix')
+        length_bytes = read_exact(io, LENGTH_PREFIX_SIZE, timeout: timeout, error_message: 'Incomplete length prefix')
         return nil if length_bytes.nil?
 
         length = length_bytes.unpack1(LENGTH_PREFIX_FORMAT)
@@ -49,7 +50,7 @@ module Eluent
         end
 
         # Read message body - nil here means truncated message (protocol error)
-        json = read_exact(io, length, error_message: 'Incomplete message body')
+        json = read_exact(io, length, timeout: timeout, error_message: 'Incomplete message body')
         raise ProtocolError, 'Incomplete message body' if json.nil?
 
         JSON.parse(json, symbolize_names: true)
@@ -57,25 +58,72 @@ module Eluent
         raise ProtocolError, "Invalid JSON: #{e.message}"
       end
 
-      # Read exactly n bytes from IO, handling partial reads
-      # Returns nil for empty stream, raises ProtocolError for partial reads
-      def read_exact(io, bytes_needed, error_message: 'Incomplete read')
+      # Read exactly n bytes from IO, handling partial reads with timeout
+      # Returns nil for empty stream, raises ProtocolError for partial reads or timeout
+      def read_exact(io, bytes_needed, timeout: DEFAULT_READ_TIMEOUT, error_message: 'Incomplete read')
+        # Use blocking read for StringIO and other non-selectable streams (e.g., in tests)
+        return read_exact_blocking(io, bytes_needed, error_message) unless selectable?(io)
+
+        read_exact_with_timeout(io, bytes_needed, timeout, error_message)
+      end
+
+      def selectable?(io)
+        io.respond_to?(:to_io)
+      rescue IOError
+        false
+      end
+
+      def read_exact_blocking(io, bytes_needed, error_message)
         buffer = String.new(encoding: Encoding::BINARY)
 
         while buffer.bytesize < bytes_needed
           remaining = bytes_needed - buffer.bytesize
           chunk = io.read(remaining)
 
-          # EOF reached
           if chunk.nil? || chunk.empty?
+            return nil if buffer.empty?
+
+            raise ProtocolError, error_message
+          end
+
+          buffer << chunk
+        end
+
+        buffer
+      end
+
+      def read_exact_with_timeout(io, bytes_needed, timeout, error_message)
+        buffer = String.new(encoding: Encoding::BINARY)
+        deadline = Time.now + timeout
+
+        while buffer.bytesize < bytes_needed
+          remaining_time = deadline - Time.now
+          if remaining_time <= 0
+            raise ReadTimeoutError, "Read timeout after #{timeout}s"
+          end
+
+          # Wait for data with timeout
+          unless IO.select([io], nil, nil, remaining_time)
+            raise ReadTimeoutError, "Read timeout after #{timeout}s"
+          end
+
+          remaining = bytes_needed - buffer.bytesize
+          chunk = io.read_nonblock(remaining, exception: false)
+
+          case chunk
+          when :wait_readable
+            # IO.select said readable but read_nonblock says wait - retry
+            next
+          when nil, ''
+            # EOF reached
             # If we haven't read anything, return nil (clean EOF)
             return nil if buffer.empty?
 
             # If we have partial data, raise error (truncated message)
             raise ProtocolError, error_message
+          else
+            buffer << chunk
           end
-
-          buffer << chunk
         end
 
         buffer
@@ -122,5 +170,6 @@ module Eluent
 
     class ProtocolError < Error; end
     class MessageTooLargeError < ProtocolError; end
+    class ReadTimeoutError < ProtocolError; end
   end
 end

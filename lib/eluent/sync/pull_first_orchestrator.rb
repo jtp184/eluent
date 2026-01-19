@@ -1,9 +1,13 @@
 # frozen_string_literal: true
 
+require 'fileutils'
 require 'json'
 
 module Eluent
   module Sync
+    # Error raised when a sync operation is already in progress
+    class SyncInProgressError < Error; end
+
     # Coordinates the sync workflow
     # Single responsibility: orchestrate pull-first sync process
     class PullFirstOrchestrator
@@ -35,6 +39,14 @@ module Eluent
       # @param force [Boolean] Bypass safety checks (e.g., in-progress items warning).
       # @return [SyncResult] The outcome of the sync operation.
       def sync(pull_only: false, push_only: false, dry_run: false, force: false)
+        with_sync_lock do
+          perform_sync(pull_only: pull_only, push_only: push_only, dry_run: dry_run, force: force)
+        end
+      end
+
+      private
+
+      def perform_sync(pull_only:, push_only:, dry_run:, force:)
         validate_remote!
 
         return push_changes(dry_run: dry_run, force: force) if push_only
@@ -67,37 +79,67 @@ module Eluent
           )
         end
 
-        # Apply merged result
-        apply_merge_result(merge_result)
-
-        # Push if not pull_only (before saving sync state - if push fails, state should not update)
-        commits = []
-        unless pull_only
-          unless git_adapter.clean?
-            commit_hash = commit_changes(force: force)
-            commits << commit_hash if commit_hash
-            git_adapter.push
-          end
-        end
-
-        # Update sync state only after successful push
-        new_local_head = git_adapter.current_commit
-        sync_state.update(
-          last_sync_at: Time.now.utc,
-          base_commit: remote_head,
-          local_head: new_local_head,
-          remote_head: remote_head
-        ).save
-
-        SyncResult.new(
-          status: merge_result.conflicts.any? ? :conflicted : :success,
-          changes: compute_changes(local_state, merge_result),
-          conflicts: merge_result.conflicts,
-          commits: commits
-        )
+        # Apply merged result with rollback on failure
+        apply_with_rollback(merge_result, pull_only: pull_only, force: force, remote_head: remote_head)
       end
 
-      private
+      def apply_with_rollback(merge_result, pull_only:, force:, remote_head:)
+        data_path = repository.paths.data_file
+        backup_path = "#{data_path}.backup"
+        local_state = load_current_state
+
+        # Backup data file before modification
+        FileUtils.cp(data_path, backup_path) if File.exist?(data_path)
+
+        begin
+          apply_merge_result(merge_result)
+
+          # Push if not pull_only (before saving sync state - if push fails, state should not update)
+          commits = []
+          unless pull_only
+            unless git_adapter.clean?
+              commit_hash = commit_changes(force: force)
+              commits << commit_hash if commit_hash
+              git_adapter.push
+            end
+          end
+
+          # Update sync state only after successful push
+          new_local_head = git_adapter.current_commit
+          sync_state.update(
+            last_sync_at: Time.now.utc,
+            base_commit: remote_head,
+            local_head: new_local_head,
+            remote_head: remote_head
+          ).save
+
+          SyncResult.new(
+            status: merge_result.conflicts.any? ? :conflicted : :success,
+            changes: compute_changes(local_state, merge_result),
+            conflicts: merge_result.conflicts,
+            commits: commits
+          )
+        rescue StandardError => e
+          # Restore from backup on failure
+          FileUtils.mv(backup_path, data_path) if File.exist?(backup_path)
+          raise
+        ensure
+          FileUtils.rm_f(backup_path)
+        end
+      end
+
+      def with_sync_lock
+        lock_file = File.join(repository.paths.eluent_dir, '.sync.lock')
+        FileUtils.mkdir_p(File.dirname(lock_file))
+
+        File.open(lock_file, File::CREAT | File::RDWR) do |f|
+          unless f.flock(File::LOCK_EX | File::LOCK_NB)
+            raise SyncInProgressError, 'Another sync operation is in progress'
+          end
+
+          yield
+        end
+      end
 
       attr_reader :repository, :git_adapter, :sync_state, :merge_engine
 
@@ -131,13 +173,14 @@ module Eluent
       end
 
       def empty_state
-        { atoms: [], bonds: [], comments: [] }
+        { atoms: [], bonds: [], comments: [], skipped: 0 }
       end
 
       def parse_jsonl_content(content)
         atoms = []
         bonds = []
         comments = []
+        skipped_count = 0
 
         content.each_line do |line|
           next if line.strip.empty?
@@ -152,10 +195,15 @@ module Eluent
             comments << Storage::Serializers::CommentSerializer.deserialize(data)
           end
         rescue JSON::ParserError => e
+          skipped_count += 1
           warn "el: warning: skipping malformed JSON line during sync: #{e.message}"
         end
 
-        { atoms: atoms.compact, bonds: bonds.compact, comments: comments.compact }
+        if skipped_count.positive?
+          warn "el: WARNING: #{skipped_count} record(s) skipped due to data corruption"
+        end
+
+        { atoms: atoms.compact, bonds: bonds.compact, comments: comments.compact, skipped: skipped_count }
       end
 
       def parse_jsonl_file(path)

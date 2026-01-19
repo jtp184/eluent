@@ -31,6 +31,10 @@ module Eluent
         raise ConnectionError, 'Connection refused: daemon not running?'
       rescue Errno::ENOENT
         raise ConnectionError, "Socket not found: #{socket_path}"
+      rescue Errno::EACCES
+        raise ConnectionError, "Permission denied: #{socket_path}"
+      rescue Errno::ETIMEDOUT, Errno::ENETDOWN, Errno::EHOSTDOWN, Errno::ENETUNREACH => e
+        raise ConnectionError, "Network error: #{e.message}"
       end
 
       def disconnect

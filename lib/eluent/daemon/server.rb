@@ -12,6 +12,7 @@ module Eluent
       PID_PATH = File.expand_path('~/.eluent/daemon.pid')
       LOG_PATH = File.expand_path('~/.eluent/daemon.log')
       STATE_PERSIST_INTERVAL = 5 # seconds
+      DEFAULT_CONNECTION_TIMEOUT = 300 # 5 minutes per connection
 
       attr_reader :socket_path, :pid_path
 
@@ -204,9 +205,17 @@ module Eluent
 
       def handle_connection(socket)
         mutex.synchronize { clients << socket }
+        connection_timeout = config.fetch(:connection_timeout, DEFAULT_CONNECTION_TIMEOUT)
+        deadline = Time.now + connection_timeout
 
         loop do
-          request = Protocol.decode(socket)
+          remaining_time = deadline - Time.now
+          if remaining_time <= 0
+            log 'Connection timeout: closing connection'
+            break
+          end
+
+          request = Protocol.decode(socket, timeout: [remaining_time, Protocol::DEFAULT_READ_TIMEOUT].min)
           break if request.nil? # Client disconnected
 
           log "Request: #{request[:cmd]} (#{request[:id]})"
@@ -215,6 +224,8 @@ module Eluent
         end
       rescue IOError, Errno::ECONNRESET, Errno::EPIPE
         # Client disconnected
+      rescue ReadTimeoutError
+        log 'Read timeout: closing connection'
       rescue ProtocolError => e
         log "Protocol error: #{e.message}"
         begin

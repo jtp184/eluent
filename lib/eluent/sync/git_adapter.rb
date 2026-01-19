@@ -16,7 +16,10 @@ module Eluent
       # --- Query Methods ---
 
       def current_branch
-        run_git('rev-parse', '--abbrev-ref', 'HEAD').strip
+        branch = run_git('rev-parse', '--abbrev-ref', 'HEAD').strip
+        raise DetachedHeadError, 'Cannot sync: HEAD is detached' if branch == 'HEAD'
+
+        branch
       end
 
       def current_commit
@@ -132,6 +135,13 @@ module Eluent
     # Error raised when no remote is configured
     class NoRemoteError < GitError
       def initialize(message = 'No remote configured')
+        super
+      end
+    end
+
+    # Error raised when HEAD is detached
+    class DetachedHeadError < GitError
+      def initialize(message = 'Cannot sync: HEAD is detached')
         super
       end
     end

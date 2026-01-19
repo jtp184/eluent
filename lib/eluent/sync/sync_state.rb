@@ -35,6 +35,9 @@ module Eluent
         @local_head = data[:local_head]
         @remote_head = data[:remote_head]
         self
+      rescue JSON::ParserError => e
+        warn "el: warning: corrupted sync state, resetting: #{e.message}"
+        reset!
       end
 
       def save
