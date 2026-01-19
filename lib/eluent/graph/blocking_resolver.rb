@@ -85,7 +85,7 @@ module Eluent
         !source.closed?
       end
 
-      # parent_child: Blocked if parent is not closed (recursive via blocking_parent?)
+      # parent_child: Blocked if immediate parent is not closed
       def blocking_by_parent_child?(source)
         !source.closed?
       end
@@ -111,15 +111,11 @@ module Eluent
         end
       end
 
-      # Recursively check parent chain for blocking
+      # Check if immediate parent blocks the child
       def blocking_parent?(parent)
         return false if parent.nil?
-        return false if parent.closed?
-        return true unless parent.parent_id
 
-        # Parent is open, so check if grandparent also blocks
-        grandparent = indexer.find_by_id(parent.parent_id)
-        grandparent.nil? || blocking_parent?(grandparent)
+        !parent.closed?
       end
     end
   end

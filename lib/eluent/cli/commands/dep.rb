@@ -259,7 +259,7 @@ module Eluent
           puts @pastel.bold("Dependency tree for #{short_id}")
           puts @pastel.dim("(#{blocking_only ? 'blocking only' : 'all dependencies'})\n")
 
-          renderer = TreeRenderer.new(repository: repository, graph: graph, formatter: self)
+          renderer = TreeRenderer.new(repository: repository, graph: graph)
           puts renderer.render(atom.id, blocking_only: blocking_only)
         end
 
@@ -267,10 +267,9 @@ module Eluent
         class TreeRenderer
           include Formatting
 
-          def initialize(repository:, graph:, formatter:)
+          def initialize(repository:, graph:)
             @repository = repository
             @graph = graph
-            @formatter = formatter
           end
 
           def render(root_id, blocking_only:)
@@ -280,7 +279,7 @@ module Eluent
 
           private
 
-          attr_reader :repository, :graph, :formatter
+          attr_reader :repository, :graph
 
           def build_tree_data(root_id, blocking_only)
             root_atom = repository.find_atom_by_id(root_id)

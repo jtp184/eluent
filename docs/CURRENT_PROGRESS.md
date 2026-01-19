@@ -92,7 +92,7 @@ Dependencies, blocking, ready work
 - [x] `lib/eluent/graph/cycle_detector.rb` — Pre-creation validation with cycle path return, self-reference prevention
 - [x] `lib/eluent/graph/blocking_resolver.rb` — Transitive blocking for all 4 types with caching:
   - `blocks`: Source must be closed
-  - `parent_child`: Parent chain must be closed (cascades up)
+  - `parent_child`: Immediate parent must be closed
   - `conditional_blocks`: Only blocks if source failed (FAILURE_PATTERN = `/^(fail|error|abort)/i`)
   - `waits_for`: Source AND all descendants must be closed
 

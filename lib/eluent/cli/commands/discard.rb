@@ -136,7 +136,11 @@ module Eluent
           atoms_to_prune = find_atoms_to_prune(days)
 
           return success("No discarded items older than #{days} days to prune") if atoms_to_prune.empty?
-          return 0 unless confirm_prune(atoms_to_prune)
+
+          unless confirm_prune(atoms_to_prune)
+            puts @pastel.yellow('Prune cancelled')
+            return 0
+          end
 
           pruned_ids = execute_prune(atoms_to_prune)
           success("Pruned #{pruned_ids.size} item(s)", data: { pruned_count: pruned_ids.size, pruned_ids: pruned_ids })

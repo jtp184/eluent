@@ -99,7 +99,7 @@ module Eluent
         sorted_recent = sort_by_priority(recent)
         sorted_older = sort_by_oldest(older)
 
-        # Interleave: older items first to prevent starvation, then recent by priority
+        # Concatenate: older items first to prevent starvation, then recent by priority
         sorted_older + sorted_recent
       end
     end
