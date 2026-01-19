@@ -18,9 +18,15 @@ module Eluent
     class Restorer
       def initialize(repository:, git_adapter: nil)
         @repository = repository
-        @git_adapter = git_adapter || Sync::GitAdapter.new(repository.paths)
+        @git_adapter = git_adapter || Sync::GitAdapter.new(repo_path: repository.paths.root)
       end
 
+      # Restores a compacted atom from git history.
+      #
+      # Note on atomicity: This operation is NOT atomic. If interrupted mid-operation,
+      # the atom's description may be restored while comments are not (or vice versa).
+      # However, this is recoverable: simply re-run restore to complete the restoration.
+      # The 'restored_at' metadata is set at the end, so partial restores can be detected.
       def restore(atom_id)
         atom = repository.find_atom(atom_id)
         raise Registry::IdNotFoundError, atom_id unless atom

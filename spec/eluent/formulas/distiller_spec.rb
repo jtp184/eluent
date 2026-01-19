@@ -93,7 +93,7 @@ RSpec.describe Eluent::Formulas::Distiller do
         formula = distiller.distill(
           root_atom.id,
           formula_id: 'auth-workflow',
-          variable_mappings: { 'Auth' => 'feature_name' }
+          literal_to_var_map: { 'Auth' => 'feature_name' }
         )
 
         expect(formula.title).to eq('{{feature_name}} Feature')
@@ -106,7 +106,7 @@ RSpec.describe Eluent::Formulas::Distiller do
         formula = distiller.distill(
           root_atom.id,
           formula_id: 'auth-workflow',
-          variable_mappings: { 'Auth' => 'feature_name' }
+          literal_to_var_map: { 'Auth' => 'feature_name' }
         )
 
         expect(formula.variables).to have_key('feature_name')
@@ -125,7 +125,7 @@ RSpec.describe Eluent::Formulas::Distiller do
         formula = distiller.distill(
           auth_atom.id,
           formula_id: 'overlapping-test',
-          variable_mappings: {
+          literal_to_var_map: {
             'Auth' => 'short',
             'Authentication' => 'full'
           }

@@ -190,7 +190,7 @@ RSpec.describe Eluent::Formulas::Parser, :filesystem do
       write_formula('workflow-b', <<~YAML)
         id: workflow-b
         title: Workflow B
-        phase: ephemeral
+        retention: ephemeral
         steps:
           - id: step1
             title: Step

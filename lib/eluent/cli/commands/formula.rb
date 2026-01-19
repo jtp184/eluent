@@ -5,29 +5,26 @@ require_relative '../formatting'
 module Eluent
   module CLI
     module Commands
-      # Formula and compaction management commands
-      # rubocop:disable Metrics/ClassLength -- CLI command with 8 subcommands
+      # Formula management commands for reusable work templates
       class Formula < BaseCommand
         include Formatting
 
-        ACTIONS = %w[list show instantiate distill compose attach compact restore].freeze
+        ACTIONS = %w[list show instantiate distill compose attach].freeze
 
         usage do
           program 'el formula'
-          desc 'Manage formulas and compaction'
+          desc 'Manage formulas (reusable work templates)'
           example 'el formula list', 'List all formulas'
           example 'el formula show ID', 'Show formula details'
           example 'el formula instantiate ID --var name=value', 'Create items from template'
-          example 'el formula distill ROOT_ID --id new-formula --var "v2.0=version"', 'Extract formula from work'
+          example 'el formula distill ROOT_ID --id new-formula --extract "v2.0=version"', 'Extract formula from work'
           example 'el formula compose A B --type sequential --id combined', 'Combine formulas'
           example 'el formula attach ID TARGET --type parallel', 'Attach formula to existing item'
-          example 'el formula compact --tier 1 [--preview]', 'Compact old items'
-          example 'el formula restore ID', 'Restore from git history'
         end
 
         argument :action do
           required
-          desc 'Action: list, show, instantiate, distill, compose, attach, compact, restore'
+          desc 'Action: list, show, instantiate, distill, compose, attach'
         end
 
         argument :target do
@@ -44,7 +41,14 @@ module Eluent
         option :var do
           short '-V'
           long '--var VAR'
-          desc 'Variable in key=value format (can be repeated)'
+          desc 'Variable value in name=value format (can be repeated)'
+          arity zero_or_more
+        end
+
+        option :extract do
+          short '-E'
+          long '--extract MAPPING'
+          desc 'Extract literal as variable: "literal=varname" (can be repeated, for distill)'
           arity zero_or_more
         end
 
@@ -63,18 +67,6 @@ module Eluent
           long '--type TYPE'
           desc 'Composition type (sequential, parallel, conditional) or attachment type'
           default 'sequential'
-        end
-
-        option :tier do
-          long '--tier TIER'
-          desc 'Compaction tier (1 or 2)'
-          convert :int
-          default 1
-        end
-
-        flag :preview do
-          long '--preview'
-          desc 'Preview compaction without applying'
         end
 
         flag :help do
@@ -154,10 +146,10 @@ module Eluent
           new_id = params[:id]
           return error('MISSING_ID', 'New formula ID required: el formula distill ROOT_ID --id NEW_ID') unless new_id
 
-          variable_mappings = parse_variable_mappings
+          extraction_mappings = parse_extraction_mappings
 
           distiller = Formulas::Distiller.new(repository: repository)
-          formula = distiller.distill(root_id, formula_id: new_id, variable_mappings: variable_mappings)
+          formula = distiller.distill(root_id, formula_id: new_id, literal_to_var_map: extraction_mappings)
 
           parser.save(formula)
 
@@ -201,43 +193,6 @@ module Eluent
                   data: result.to_h)
         end
 
-        def action_compact
-          tier = params[:tier]
-          preview = params[:preview]
-
-          return error('INVALID_TIER', 'Tier must be 1 or 2') unless [1, 2].include?(tier)
-
-          compactor = Compaction::Compactor.new(repository: repository)
-
-          if preview
-            result = compactor.compact_all(tier: tier, preview: true)
-            output_compact_preview(result, tier)
-          else
-            result = compactor.compact_all(tier: tier)
-            output_compact_result(result)
-          end
-
-          0
-        end
-
-        def action_restore
-          atom_id = params[:target]
-          return error('MISSING_ID', 'Atom ID required: el formula restore ID') unless atom_id
-
-          if params[:preview]
-            restorer = Compaction::Restorer.new(repository: repository)
-            preview = restorer.preview_restore(atom_id)
-            output_restore_preview(preview)
-            return 0
-          end
-
-          restorer = Compaction::Restorer.new(repository: repository)
-          result = restorer.restore(atom_id)
-
-          success("Restored atom #{short_id(atom_id)} from git history",
-                  data: result.to_h)
-        end
-
         # --- Output Helpers ---
 
         def output_list_json(formulas)
@@ -256,8 +211,8 @@ module Eluent
           puts @pastel.bold("Formulas (#{formulas.size}):\n")
 
           formulas.each do |f|
-            phase_badge = f[:phase] == 'ephemeral' ? @pastel.yellow(' [ephemeral]') : ''
-            puts "  #{@pastel.cyan(f[:id])}#{phase_badge}"
+            retention_badge = f[:retention] == 'ephemeral' ? @pastel.yellow(' [ephemeral]') : ''
+            puts "  #{@pastel.cyan(f[:id])}#{retention_badge}"
             puts "    #{f[:title]}"
             puts "    #{f[:steps_count]} steps, #{f[:variables_count]} variables, v#{f[:version]}"
             puts
@@ -281,7 +236,7 @@ module Eluent
           puts @pastel.bold("Formula: #{formula.id}")
           puts "Title: #{formula.title}"
           puts "Version: #{formula.version}"
-          puts "Phase: #{formula.phase}"
+          puts "Retention: #{formula.retention}"
           puts "Description: #{formula.description}" if formula.description
           puts
         end
@@ -308,50 +263,6 @@ module Eluent
           end
         end
 
-        def output_compact_preview(result, tier)
-          if @robot_mode
-            puts JSON.generate({ status: 'ok', data: result })
-            return
-          end
-
-          puts @pastel.bold("Compaction Preview (Tier #{tier})")
-          puts "Candidates: #{result[:candidate_count]}"
-          before = result[:total_description_bytes_before]
-          after = result[:total_description_bytes_after]
-          puts "Description bytes: #{before} -> #{after}"
-          puts "Comments: #{result[:total_comments_before]} -> #{result[:total_comments_after]}"
-          puts
-          puts @pastel.dim('Run without --preview to apply compaction')
-        end
-
-        def output_compact_result(result)
-          if @robot_mode
-            puts JSON.generate({ status: 'ok', data: result.to_h })
-            return
-          end
-
-          puts @pastel.bold("Compaction Complete (Tier #{result.tier})")
-          puts "Total: #{result.results.size}"
-          puts "Success: #{result.success_count}"
-          puts "Errors: #{result.error_count}" if result.error_count.positive?
-        end
-
-        def output_restore_preview(preview)
-          if @robot_mode
-            puts JSON.generate({ status: 'ok', data: preview })
-            return
-          end
-
-          puts @pastel.bold('Restore Preview')
-          puts "Atom: #{preview[:atom_id]}"
-          puts "Current tier: #{preview[:current][:compaction_tier]}"
-          current_len = preview[:current][:description_length]
-          restored_len = preview[:restored][:description_length]
-          puts "Description: #{current_len} -> #{restored_len} bytes"
-          puts "Comments: #{preview[:current][:comment_count]} -> #{preview[:restored][:comment_count]}"
-          puts "From commit: #{preview[:commit]}"
-        end
-
         # --- Helpers ---
 
         def parse_variables
@@ -361,10 +272,10 @@ module Eluent
           end
         end
 
-        def parse_variable_mappings
-          # For distill: --var "v2.0=version" means replace "v2.0" with {{version}}
-          Array(params[:var]).to_h do |var_str|
-            literal, var_name = var_str.split('=', 2)
+        def parse_extraction_mappings
+          # For distill: --extract "v2.0=version" means replace "v2.0" with {{version}}
+          Array(params[:extract]).to_h do |mapping_str|
+            literal, var_name = mapping_str.split('=', 2)
             [literal, var_name]
           end
         end
@@ -374,7 +285,6 @@ module Eluent
           atom ? repository.id_resolver.short_id(atom) : atom_id
         end
       end
-      # rubocop:enable Metrics/ClassLength
     end
   end
 end

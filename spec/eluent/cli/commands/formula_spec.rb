@@ -27,8 +27,6 @@ RSpec.describe Eluent::CLI::Commands::Formula do
   rescue Eluent::Formulas::FormulaNotFoundError,
          Eluent::Formulas::ParseError,
          Eluent::Formulas::VariableError,
-         Eluent::Compaction::CompactionError,
-         Eluent::Compaction::RestoreError,
          Eluent::Registry::IdNotFoundError,
          Eluent::Storage::RepositoryNotFoundError => e
     $stderr.puts "Error: #{e.message}"
@@ -201,39 +199,6 @@ RSpec.describe Eluent::CLI::Commands::Formula do
 
     it 'returns error for fewer than 2 formulas' do
       expect(run_command('compose', 'design', '--id', 'single')).to eq(1)
-    end
-  end
-
-  describe 'compact action' do
-    # Use valid ULID-format ID
-    let(:old_atom_id) { 'testrepo-01KFBX0000E0MK5JSH2N34CP0D' }
-
-    before do
-      old_time = (Time.now.utc - (60 * 24 * 60 * 60)).iso8601
-      # Write full data file with old atom
-      File.write(
-        File.join(root_path, '.eluent', 'data.jsonl'),
-        <<~JSONL
-          {"_type":"header","repo_name":"testrepo"}
-          {"_type":"atom","id":"#{old_atom_id}","title":"Old Item","status":"closed","created_at":"#{old_time}","updated_at":"#{old_time}","description":"#{'x' * 100}"}
-        JSONL
-      )
-    end
-
-    it 'compacts old items' do
-      expect { run_command('compact', '--tier', '1') }
-        .to output(/Compaction Complete/).to_stdout
-    end
-
-    context 'with --preview flag' do
-      it 'shows preview without compacting' do
-        expect { run_command('compact', '--tier', '1', '--preview') }
-          .to output(/Preview/).to_stdout
-      end
-    end
-
-    it 'returns error for invalid tier' do
-      expect(run_command('compact', '--tier', '99')).to eq(1)
     end
   end
 

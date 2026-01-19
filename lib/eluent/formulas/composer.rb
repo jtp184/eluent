@@ -2,7 +2,21 @@
 
 module Eluent
   module Formulas
-    # Combines multiple formulas into a single composite formula
+    # Combines multiple formulas into a single composite formula.
+    #
+    # Supports three composition types with different execution semantics:
+    #
+    # - :sequential - Chained execution where formulas run in order.
+    #   The last step of formula A becomes a dependency of the first step of formula B.
+    #   Use for workflows with a clear progression (e.g., design -> implement -> deploy).
+    #
+    # - :parallel - Independent execution with no cross-formula dependencies.
+    #   All formula steps are included but can run concurrently.
+    #   Use for combining independent workstreams under one umbrella.
+    #
+    # - :conditional - Branch selection via a 'branch' variable.
+    #   Steps are tagged with their source formula; only matching steps are created.
+    #   Use for workflows with mutually exclusive paths (e.g., "hotfix" vs "feature" release).
     class Composer
       COMPOSITION_TYPES = %i[sequential parallel conditional].freeze
 
@@ -134,7 +148,7 @@ module Eluent
           id: new_id,
           title: title || "#{type_label}: #{formulas.map(&:title).join(joiner)}",
           description: "#{type_label} composition of: #{formulas.map(&:id).join(', ')}#{description_suffix}",
-          version: 1, phase: :persistent, variables: variables, steps: steps,
+          version: 1, retention: :permanent, variables: variables, steps: steps,
           metadata: { composition_type: type, source_formulas: formulas.map(&:id) }
         )
       end

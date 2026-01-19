@@ -2,11 +2,20 @@
 
 module Eluent
   module Compaction
-    # Performs tier-based compaction of old closed items
+    # Performs tier-based compaction of old closed items.
+    #
+    # Compaction reduces storage for old, closed work items by progressively
+    # summarizing their content. This is a space-vs-detail tradeoff:
+    # - Items remain searchable and viewable, just with less detail
+    # - Original content can be restored from git history if needed
     class Compactor
+      # Tier 1 (30 days): Light compaction - truncates long descriptions, summarizes comments.
+      #   Rationale: After a month, detailed context is rarely needed but summary is valuable.
+      # Tier 2 (90 days): Aggressive compaction - one-liner descriptions, comments removed.
+      #   Rationale: After 3 months, only the fact that work was done matters, not the details.
       TIER_THRESHOLDS = {
-        1 => 30,  # 30 days
-        2 => 90   # 90 days
+        1 => 30,
+        2 => 90
       }.freeze
 
       def initialize(repository:)
@@ -25,6 +34,13 @@ module Eluent
         end
       end
 
+      # Compacts a single atom to the specified tier.
+      #
+      # Note on atomicity: This operation is NOT atomic. If interrupted mid-operation,
+      # the atom's description may be updated while comments are not (or vice versa).
+      # However, this is recoverable: the original content is preserved in git history
+      # and can be restored using Restorer#restore. The compaction_tier metadata marker
+      # is set last, so partial compactions can be detected and re-run.
       def compact(atom_id, tier:)
         atom = repository.find_atom(atom_id)
         raise Registry::IdNotFoundError, atom_id unless atom

@@ -8,22 +8,28 @@ module Eluent
         @repository = repository
       end
 
-      def distill(root_atom_id, formula_id:, variable_mappings: {})
+      # Distills a formula from an existing atom hierarchy.
+      #
+      # @param root_atom_id [String] ID of the root atom to distill from
+      # @param formula_id [String] ID for the new formula
+      # @param literal_to_var_map [Hash] Map of literal strings to variable names
+      #   e.g., { "v2.0" => "version" } replaces "v2.0" with {{version}}
+      def distill(root_atom_id, formula_id:, literal_to_var_map: {})
         root = repository.find_atom(root_atom_id)
         raise Registry::IdNotFoundError, root_atom_id unless root
 
         children = find_children(root.id)
         graph = build_dependency_graph(root.id, children)
 
-        steps = children.map { |child| build_step(child, graph, variable_mappings) }
-        variables = extract_variables(variable_mappings)
+        steps = children.map { |child| build_step(child, graph, literal_to_var_map) }
+        variables = build_variable_definitions(literal_to_var_map)
 
         Models::Formula.new(
           id: formula_id,
-          title: apply_reverse_mappings(root.title, variable_mappings),
-          description: apply_reverse_mappings(root.description, variable_mappings),
+          title: templatize_text(root.title, literal_to_var_map),
+          description: templatize_text(root.description, literal_to_var_map),
           version: 1,
-          phase: :persistent,
+          retention: :permanent,
           variables: variables,
           steps: steps,
           metadata: {
@@ -58,19 +64,19 @@ module Eluent
         graph
       end
 
-      def build_step(atom, graph, variable_mappings)
+      def build_step(atom, graph, literal_to_var_map)
         step_id = generate_step_id(atom)
         dependencies = graph[atom.id].map { |dep_id| id_to_step_id(dep_id, graph) }.compact
 
         Models::Step.new(
           id: step_id,
-          title: apply_reverse_mappings(atom.title, variable_mappings),
+          title: templatize_text(atom.title, literal_to_var_map),
           issue_type: atom.issue_type,
-          description: apply_reverse_mappings(atom.description, variable_mappings),
+          description: templatize_text(atom.description, literal_to_var_map),
           depends_on: dependencies,
-          assignee: apply_reverse_mappings(atom.assignee, variable_mappings),
+          assignee: templatize_text(atom.assignee, literal_to_var_map),
           priority: atom.priority,
-          labels: atom.labels.to_a.map { |l| apply_reverse_mappings(l, variable_mappings) }
+          labels: atom.labels.to_a.map { |l| templatize_text(l, literal_to_var_map) }
         )
       end
 
@@ -98,21 +104,23 @@ module Eluent
             .then { |s| s.empty? ? 'step' : s }
       end
 
-      def apply_reverse_mappings(text, mappings)
+      # Replaces literal strings with variable template placeholders ({{varname}}).
+      def templatize_text(text, literal_to_var_map)
         return text unless text.is_a?(String)
 
         result = text.dup
         # Sort by key length descending to avoid overlapping replacements
         # (e.g., "Authentication" before "Auth")
-        sorted_mappings = mappings.sort_by { |literal_value, _| -literal_value.to_s.length }
+        sorted_mappings = literal_to_var_map.sort_by { |literal_value, _| -literal_value.to_s.length }
         sorted_mappings.each do |literal_value, var_name|
           result = result.gsub(literal_value.to_s, "{{#{var_name}}}")
         end
         result
       end
 
-      def extract_variables(mappings)
-        mappings.to_h do |literal_value, var_name|
+      # Builds variable definitions from the extraction mappings.
+      def build_variable_definitions(literal_to_var_map)
+        literal_to_var_map.to_h do |literal_value, var_name|
           var_attrs = {
             description: "Extracted from '#{literal_value}'",
             required: true

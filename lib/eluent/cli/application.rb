@@ -10,7 +10,11 @@ module Eluent
     class Application
       include TTY::Option
 
-      COMMANDS = %w[init create list show update close reopen config ready dep comment discard sync daemon formula].freeze
+      COMMANDS = %w[
+        init create list show update close reopen
+        config ready dep comment discard sync daemon
+        formula compact
+      ].freeze
 
       ERROR_CODES = {
         Storage::RepositoryNotFoundError => 'REPO_NOT_FOUND',

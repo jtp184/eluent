@@ -127,7 +127,7 @@ RSpec.describe Eluent::Formulas::Instantiator do
         Eluent::Models::Formula.new(
           id: 'ephemeral-workflow',
           title: 'Ephemeral: {{name}}',
-          phase: :ephemeral,
+          retention: :ephemeral,
           variables: { name: { required: true } },
           steps: [{ id: 'step1', title: 'Step for {{name}}' }]
         )

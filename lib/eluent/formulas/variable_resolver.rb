@@ -57,7 +57,7 @@ module Eluent
           title: substitute(formula.title, resolved_values),
           description: substitute(formula.description, resolved_values),
           version: formula.version,
-          phase: formula.phase,
+          retention: formula.retention,
           variables: formula.variables,
           steps: formula.steps.map { |s| substitute_step(s, resolved_values) },
           created_at: formula.created_at,

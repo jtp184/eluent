@@ -6,17 +6,17 @@ module Eluent
     class Formula
       include Validations
 
-      attr_accessor :id, :title, :description, :version, :phase,
+      attr_accessor :id, :title, :description, :version, :retention,
                     :variables, :steps, :created_at, :updated_at, :metadata
 
-      VALID_PHASES = %i[persistent ephemeral].freeze
+      VALID_RETENTIONS = %i[permanent ephemeral].freeze
 
       def initialize(
         id:,
         title:,
         description: nil,
         version: 1,
-        phase: :persistent,
+        retention: :permanent,
         variables: {},
         steps: [],
         created_at: Time.now.utc,
@@ -27,7 +27,7 @@ module Eluent
         @title = validate_title(title)
         @description = validate_content(description)
         @version = validate_version(version)
-        @phase = validate_phase(phase)
+        @retention = validate_retention(retention)
         @variables = build_variables(variables)
         @steps = build_steps(steps)
         @created_at = parse_time(created_at)
@@ -35,12 +35,12 @@ module Eluent
         @metadata = metadata
       end
 
-      def persistent?
-        phase == :persistent
+      def permanent?
+        retention == :permanent
       end
 
       def ephemeral?
-        phase == :ephemeral
+        retention == :ephemeral
       end
 
       def variable_names
@@ -66,7 +66,7 @@ module Eluent
           title: title,
           description: description,
           version: version,
-          phase: phase.to_s,
+          retention: retention.to_s,
           variables: variables.transform_values(&:to_h),
           steps: steps.map(&:to_h),
           created_at: created_at&.iso8601,
@@ -105,11 +105,11 @@ module Eluent
         raise ValidationError, "version must be integer, got: #{value}"
       end
 
-      def validate_phase(value)
-        phase_sym = value.to_sym
-        return phase_sym if VALID_PHASES.include?(phase_sym)
+      def validate_retention(value)
+        retention_sym = value.to_sym
+        return retention_sym if VALID_RETENTIONS.include?(retention_sym)
 
-        raise ValidationError, "invalid phase: #{value}. Valid: #{VALID_PHASES.join(', ')}"
+        raise ValidationError, "invalid retention: #{value}. Valid: #{VALID_RETENTIONS.join(', ')}"
       end
 
       def build_variables(variables_hash)

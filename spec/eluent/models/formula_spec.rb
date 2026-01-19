@@ -15,7 +15,7 @@ RSpec.describe Eluent::Models::Formula do
       title: 'Full Test: {{name}}',
       description: 'A complete formula with {{name}}',
       version: 2,
-      phase: :ephemeral,
+      retention: :ephemeral,
       variables: {
         name: { description: 'The name', required: true },
         component: { default: 'core', enum: %w[core api ui] }
@@ -37,7 +37,7 @@ RSpec.describe Eluent::Models::Formula do
 
     it 'sets default values' do
       expect(minimal_formula.version).to eq(1)
-      expect(minimal_formula.phase).to eq(:persistent)
+      expect(minimal_formula.retention).to eq(:permanent)
       expect(minimal_formula.variables).to eq({})
       expect(minimal_formula.metadata).to eq({})
     end
@@ -57,9 +57,9 @@ RSpec.describe Eluent::Models::Formula do
         .to raise_error(Eluent::Models::ValidationError, /must be positive/)
     end
 
-    it 'validates phase' do
-      expect { described_class.new(id: 'test', title: 'Test', phase: :invalid, steps: [{ title: 'Step' }]) }
-        .to raise_error(Eluent::Models::ValidationError, /invalid phase/)
+    it 'validates retention' do
+      expect { described_class.new(id: 'test', title: 'Test', retention: :invalid, steps: [{ title: 'Step' }]) }
+        .to raise_error(Eluent::Models::ValidationError, /invalid retention/)
     end
 
     it 'builds Variable objects from hash' do
@@ -73,22 +73,22 @@ RSpec.describe Eluent::Models::Formula do
     end
   end
 
-  describe '#persistent?' do
-    it 'returns true when phase is persistent' do
-      expect(minimal_formula.persistent?).to be true
+  describe '#permanent?' do
+    it 'returns true when retention is permanent' do
+      expect(minimal_formula.permanent?).to be true
     end
 
-    it 'returns false when phase is ephemeral' do
-      expect(full_formula.persistent?).to be false
+    it 'returns false when retention is ephemeral' do
+      expect(full_formula.permanent?).to be false
     end
   end
 
   describe '#ephemeral?' do
-    it 'returns false when phase is persistent' do
+    it 'returns false when retention is permanent' do
       expect(minimal_formula.ephemeral?).to be false
     end
 
-    it 'returns true when phase is ephemeral' do
+    it 'returns true when retention is ephemeral' do
       expect(full_formula.ephemeral?).to be true
     end
   end
@@ -139,7 +139,7 @@ RSpec.describe Eluent::Models::Formula do
       expect(hash[:id]).to eq('full-formula')
       expect(hash[:title]).to eq('Full Test: {{name}}')
       expect(hash[:version]).to eq(2)
-      expect(hash[:phase]).to eq('ephemeral')
+      expect(hash[:retention]).to eq('ephemeral')
     end
 
     it 'serializes variables' do

@@ -55,7 +55,7 @@ module Eluent
             id: yaml['id'],
             title: yaml['title'],
             version: yaml['version'] || 1,
-            phase: yaml['phase'] || 'persistent',
+            retention: yaml['retention'] || 'permanent',
             steps_count: Array(yaml['steps']).size,
             variables_count: (yaml['variables'] || {}).size
           }
@@ -106,7 +106,7 @@ module Eluent
           title: yaml['title'],
           description: yaml['description'],
           version: yaml['version'] || 1,
-          phase: (yaml['phase'] || 'persistent').to_sym,
+          retention: (yaml['retention'] || 'permanent').to_sym,
           variables: parse_variables(yaml['variables'] || {}),
           steps: parse_steps(yaml['steps'] || []),
           metadata: yaml['metadata'] || {}
@@ -178,7 +178,7 @@ module Eluent
         yaml = { 'id' => formula.id, 'title' => formula.title }
         yaml['description'] = formula.description if formula.description
         yaml['version'] = formula.version if formula.version != 1
-        yaml['phase'] = formula.phase.to_s if formula.phase != :persistent
+        yaml['retention'] = formula.retention.to_s if formula.retention != :permanent
         yaml
       end
 

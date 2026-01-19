@@ -7,7 +7,12 @@ module Eluent
 
     # Generates summaries for compaction of old closed items
     class Summarizer
+      # Tier 1 summary length: enough to preserve the key context and decisions,
+      # roughly 2-3 paragraphs or a detailed abstract of the work item.
       MAX_SUMMARY_LENGTH = 500
+
+      # Tier 2 one-liner length: just enough to identify what the item was about,
+      # similar to a commit message subject line or issue title.
       MAX_ONELINER_LENGTH = 100
 
       def initialize(repository:)
