@@ -207,7 +207,7 @@ module Eluent
         result.subtract(local_removed)
         result.subtract(remote_removed)
 
-        result
+        result.to_a
       end
 
       # Deep merge metadata hashes with remote-wins precedence.

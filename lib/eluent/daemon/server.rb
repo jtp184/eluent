@@ -270,7 +270,11 @@ module Eluent
 
       def force_close_clients
         mutex.synchronize do
-          clients.each { |c| c.close rescue nil }
+          clients.each do |c|
+            c.close
+          rescue IOError
+            nil
+          end
           clients.clear
         end
       end

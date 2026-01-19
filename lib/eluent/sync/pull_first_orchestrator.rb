@@ -47,6 +47,8 @@ module Eluent
       private
 
       def perform_sync(pull_only:, push_only:, dry_run:, force:)
+        raise ArgumentError, 'Cannot use both pull_only and push_only' if pull_only && push_only
+
         validate_remote!
 
         return push_changes(dry_run: dry_run, force: force) if push_only
@@ -54,6 +56,8 @@ module Eluent
         git_adapter.fetch
 
         remote_head = git_adapter.remote_head
+        raise NoRemoteError, 'Remote branch not found' if remote_head.nil?
+
         local_head = git_adapter.current_commit
         base_commit = sync_state.base_commit || find_merge_base(local_head, remote_head)
 
@@ -85,7 +89,7 @@ module Eluent
 
       def apply_with_rollback(merge_result, pull_only:, force:, remote_head:)
         data_path = repository.paths.data_file
-        backup_path = "#{data_path}.backup"
+        backup_path = "#{data_path.chomp('/')}.backup"
         local_state = load_current_state
 
         # Backup data file before modification
@@ -266,29 +270,32 @@ module Eluent
       end
 
       # Computes the diff between local state and merge result to report what changed.
-      # Uses set operations on atom IDs to categorize changes.
+      # Uses hash lookups for O(n) performance instead of O(n²) find loops.
       def compute_changes(local_state, merge_result)
         changes = []
 
-        local_ids = Set.new(local_state[:atoms].map(&:id))
-        merged_ids = Set.new(merge_result.atoms.map(&:id))
+        local_by_id = local_state[:atoms].to_h { |a| [a.id, a] }
+        merged_by_id = merge_result.atoms.to_h { |a| [a.id, a] }
+
+        local_ids = Set.new(local_by_id.keys)
+        merged_ids = Set.new(merged_by_id.keys)
 
         # Set difference: IDs in merged but not in local = atoms added from remote
         (merged_ids - local_ids).each do |id|
-          atom = merge_result.atoms.find { |a| a.id == id }
+          atom = merged_by_id[id]
           changes << { type: :added, record_type: :atom, id: id, title: atom&.title }
         end
 
         # Set difference: IDs in local but not in merged = atoms removed (deleted remotely or via merge)
         (local_ids - merged_ids).each do |id|
-          atom = local_state[:atoms].find { |a| a.id == id }
+          atom = local_by_id[id]
           changes << { type: :removed, record_type: :atom, id: id, title: atom&.title }
         end
 
         # Set intersection: IDs in both = atoms that may have been modified
         (local_ids & merged_ids).each do |id|
-          local = local_state[:atoms].find { |a| a.id == id }
-          merged = merge_result.atoms.find { |a| a.id == id }
+          local = local_by_id[id]
+          merged = merged_by_id[id]
           next if atoms_equal?(local, merged)
 
           changes << { type: :modified, record_type: :atom, id: id, title: merged&.title }

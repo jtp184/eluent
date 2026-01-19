@@ -41,8 +41,7 @@ module Eluent
       end
 
       def clean?
-        status = run_git('status', '--porcelain')
-        status.strip.empty?
+        run_git('status', '--porcelain').strip.empty?
       end
 
       def file_exists_at_commit?(commit:, path:)
