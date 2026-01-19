@@ -121,7 +121,6 @@ module Eluent
         grandparent = indexer.find_by_id(parent.parent_id)
         grandparent.nil? || blocking_parent?(grandparent)
       end
-
     end
   end
 end

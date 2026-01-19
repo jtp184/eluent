@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 RSpec.describe Eluent::Graph::DependencyGraph do
-  let(:indexer) { Eluent::Storage::Indexer.new }
   subject(:graph) { described_class.new(indexer) }
 
+  let(:indexer) { Eluent::Storage::Indexer.new }
   let(:atom_a) { build(:atom) }
   let(:atom_b) { build(:atom) }
   let(:atom_c) { build(:atom) }

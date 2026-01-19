@@ -88,9 +88,7 @@ module Eluent
           atom = repository.find_atom(item_id)
           return error('NOT_FOUND', "Atom not found: #{item_id}") unless atom
 
-          if atom.discard?
-            return error('ALREADY_DISCARDED', "Item is already discarded: #{item_id}")
-          end
+          return error('ALREADY_DISCARDED', "Item is already discarded: #{item_id}") if atom.discard?
 
           # Update atom status to discard
           atom.status = Models::Status[:discard]
@@ -122,9 +120,7 @@ module Eluent
           atom = repository.find_atom(item_id)
           return error('NOT_FOUND', "Atom not found: #{item_id}") unless atom
 
-          unless atom.discard?
-            return error('NOT_DISCARDED', "Item is not discarded: #{item_id}")
-          end
+          return error('NOT_DISCARDED', "Item is not discarded: #{item_id}") unless atom.discard?
 
           # Restore to open status
           atom.status = Models::Status[:open]
@@ -137,38 +133,44 @@ module Eluent
 
         def action_prune
           days = params[:days]
+          atoms_to_prune = find_atoms_to_prune(days)
+
+          return success("No discarded items older than #{days} days to prune") if atoms_to_prune.empty?
+          return 0 unless confirm_prune(atoms_to_prune)
+
+          pruned_ids = execute_prune(atoms_to_prune)
+          success("Pruned #{pruned_ids.size} item(s)", data: { pruned_count: pruned_ids.size, pruned_ids: pruned_ids })
+        end
+
+        def find_atoms_to_prune(days)
           cutoff = Time.now.utc - (days * 24 * 60 * 60)
 
-          atoms_to_prune = repository.indexer.all_atoms.select do |atom|
+          repository.indexer.all_atoms.select do |atom|
             next false unless atom.discard?
             next false if params[:ephemeral] && !ephemeral?(atom)
 
             atom.updated_at < cutoff
           end
+        end
 
-          if atoms_to_prune.empty?
-            return success("No discarded items older than #{days} days to prune")
-          end
+        def confirm_prune(atoms_to_prune)
+          return true if params[:force] || @robot_mode
 
-          unless params[:force] || @robot_mode
-            puts "About to permanently delete #{atoms_to_prune.size} item(s):"
-            atoms_to_prune.each do |atom|
-              short_id = repository.id_resolver.short_id(atom)
-              puts "  #{short_id}: #{truncate(atom.title, max_length: 50)}"
-            end
-            puts
-            print @pastel.yellow('Continue? [y/N] ')
-            response = $stdin.gets&.strip&.downcase
-            return 0 unless response == 'y'
-          end
-
-          pruned_ids = []
+          puts "About to permanently delete #{atoms_to_prune.size} item(s):"
           atoms_to_prune.each do |atom|
-            pruned_ids << atom.id
-            permanently_delete_atom(atom)
+            short_id = repository.id_resolver.short_id(atom)
+            puts "  #{short_id}: #{truncate(atom.title, max_length: 50)}"
           end
+          puts
+          print @pastel.yellow('Continue? [y/N] ')
+          $stdin.gets&.strip&.downcase == 'y'
+        end
 
-          success("Pruned #{pruned_ids.size} item(s)", data: { pruned_count: pruned_ids.size, pruned_ids: pruned_ids })
+        def execute_prune(atoms_to_prune)
+          atoms_to_prune.map do |atom|
+            permanently_delete_atom(atom)
+            atom.id
+          end
         end
 
         def ephemeral?(atom)

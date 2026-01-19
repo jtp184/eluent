@@ -1,14 +1,15 @@
 # frozen_string_literal: true
 
 RSpec.describe Eluent::Lifecycle::ReadinessCalculator do
+  subject(:calculator) { described_class.new(indexer: indexer, blocking_resolver: blocking_resolver) }
+
   let(:indexer) { Eluent::Storage::Indexer.new }
   let(:graph) { Eluent::Graph::DependencyGraph.new(indexer) }
   let(:blocking_resolver) { Eluent::Graph::BlockingResolver.new(indexer: indexer, dependency_graph: graph) }
-  subject(:calculator) { described_class.new(indexer: indexer, blocking_resolver: blocking_resolver) }
 
   let(:ready_atom) { build(:atom, :open, priority: 2, created_at: Time.now.utc - 3600) }
   let(:high_priority_atom) { build(:atom, :open, priority: 1, created_at: Time.now.utc - 1800) }
-  let(:old_atom) { build(:atom, :open, priority: 3, created_at: Time.now.utc - 86400 * 3) }
+  let(:old_atom) { build(:atom, :open, priority: 3, created_at: Time.now.utc - (86_400 * 3)) }
 
   before do
     [ready_atom, high_priority_atom, old_atom].each { |atom| indexer.index_atom(atom) }
@@ -195,7 +196,7 @@ RSpec.describe Eluent::Lifecycle::ReadinessCalculator do
     end
 
     context 'with sort policy :hybrid' do
-      let(:very_old_atom) { build(:atom, :open, priority: 5, created_at: Time.now.utc - 86400 * 5) }
+      let(:very_old_atom) { build(:atom, :open, priority: 5, created_at: Time.now.utc - (86_400 * 5)) }
       let(:recent_high_priority) { build(:atom, :open, priority: 0, created_at: Time.now.utc - 3600) }
 
       before do

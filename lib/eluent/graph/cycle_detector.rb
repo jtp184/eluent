@@ -26,7 +26,7 @@ module Eluent
 
         # A cycle would be created if target can already reach source
         # Adding source -> target would then create: source -> target -> ... -> source
-        if cycle_path = find_path_to_source(source_id: source_id, target_id: target_id)
+        if (cycle_path = find_path_to_source(source_id: source_id, target_id: target_id))
           { valid: false, cycle_path: cycle_path }
         else
           { valid: true }

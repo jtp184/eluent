@@ -219,9 +219,9 @@ module Eluent
           output_bond_section(bonds[:outgoing], 'Blocks (outgoing)', :target_id)
           output_bond_section(bonds[:incoming], 'Blocked by (incoming)', :source_id)
 
-          if bonds[:outgoing].empty? && bonds[:incoming].empty?
-            puts @pastel.dim('No dependencies')
-          end
+          return unless bonds[:outgoing].empty? && bonds[:incoming].empty?
+
+          puts @pastel.dim('No dependencies')
         end
 
         def output_bond_section(bonds, title, id_method)
@@ -259,43 +259,55 @@ module Eluent
           puts @pastel.bold("Dependency tree for #{short_id}")
           puts @pastel.dim("(#{blocking_only ? 'blocking only' : 'all dependencies'})\n")
 
-          tree_data = build_tree_data(atom.id, graph, blocking_only)
-          tree = TTY::Tree.new(tree_data)
-          puts tree.render
+          renderer = TreeRenderer.new(repository: repository, graph: graph, formatter: self)
+          puts renderer.render(atom.id, blocking_only: blocking_only)
         end
 
-        def build_tree_data(root_id, graph, blocking_only)
-          root_atom = repository.find_atom_by_id(root_id)
-          root_label = atom_label(root_atom)
+        # Helper class for rendering dependency trees
+        class TreeRenderer
+          include Formatting
 
-          children = build_children(root_id, graph, blocking_only, Set.new([root_id]))
-
-          { root_label => children }
-        end
-
-        def build_children(atom_id, graph, blocking_only, visited)
-          dependents = graph.direct_dependents(atom_id)
-          dependents = dependents.select(&:blocking?) if blocking_only
-
-          dependents.filter_map do |bond|
-            target_id = bond.target_id
-            next if visited.include?(target_id)
-
-            visited.add(target_id)
-            target_atom = repository.find_atom_by_id(target_id)
-            label = atom_label(target_atom)
-
-            sub_children = build_children(target_id, graph, blocking_only, visited)
-            sub_children.empty? ? label : { label => sub_children }
+          def initialize(repository:, graph:, formatter:)
+            @repository = repository
+            @graph = graph
+            @formatter = formatter
           end
-        end
 
-        def atom_label(atom)
-          return 'unknown' unless atom
+          def render(root_id, blocking_only:)
+            tree_data = build_tree_data(root_id, blocking_only)
+            TTY::Tree.new(tree_data).render
+          end
 
-          short_id = repository.id_resolver.short_id(atom)
-          status = atom.status.to_s[0].upcase
-          "#{short_id} [#{status}] #{truncate(atom.title, max_length: 30)}"
+          private
+
+          attr_reader :repository, :graph, :formatter
+
+          def build_tree_data(root_id, blocking_only)
+            root_atom = repository.find_atom_by_id(root_id)
+            { atom_label(root_atom) => build_children(root_id, blocking_only, Set.new([root_id])) }
+          end
+
+          def build_children(atom_id, blocking_only, visited)
+            dependents = graph.direct_dependents(atom_id)
+            dependents = dependents.select(&:blocking?) if blocking_only
+
+            dependents.filter_map do |bond|
+              next if visited.include?(bond.target_id)
+
+              visited.add(bond.target_id)
+              target_atom = repository.find_atom_by_id(bond.target_id)
+              label = atom_label(target_atom)
+              sub = build_children(bond.target_id, blocking_only, visited)
+              sub.empty? ? label : { label => sub }
+            end
+          end
+
+          def atom_label(atom)
+            return 'unknown' unless atom
+
+            short_id = repository.id_resolver.short_id(atom)
+            "#{short_id} [#{atom.status.to_s[0].upcase}] #{truncate(atom.title, max_length: 30)}"
+          end
         end
 
         def check_graph_health(graph)
@@ -354,8 +366,10 @@ module Eluent
               puts @pastel.red("  Orphan bond: #{issue[:missing]} atom not found")
               puts "    #{issue[:bond][:source_id]} -> #{issue[:bond][:target_id]}"
             when 'stale_block'
-              puts @pastel.yellow("  Stale block: closed item still blocking open item")
-              puts "    #{short_id_for(issue[:closed_id])} --[#{issue[:dependency_type]}]--> #{short_id_for(issue[:blocked_id])}"
+              puts @pastel.yellow('  Stale block: closed item still blocking open item')
+              closed_short = short_id_for(issue[:closed_id])
+              blocked_short = short_id_for(issue[:blocked_id])
+              puts "    #{closed_short} --[#{issue[:dependency_type]}]--> #{blocked_short}"
             end
             puts
           end

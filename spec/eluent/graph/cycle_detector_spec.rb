@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 RSpec.describe Eluent::Graph::CycleDetector do
-  let(:indexer) { Eluent::Storage::Indexer.new }
-  let(:graph) { Eluent::Graph::DependencyGraph.new(indexer) }
   subject(:detector) { described_class.new(graph) }
 
+  let(:indexer) { Eluent::Storage::Indexer.new }
   let(:atom_a) { build(:atom) }
   let(:atom_b) { build(:atom) }
   let(:atom_c) { build(:atom) }
+  let(:graph) { Eluent::Graph::DependencyGraph.new(indexer) }
 
   before do
     [atom_a, atom_b, atom_c].each { |atom| indexer.index_atom(atom) }
@@ -134,15 +134,19 @@ RSpec.describe Eluent::Graph::CycleDetector do
       end
 
       it 'includes cycle path in error' do
-        expect do
+        error = nil
+        begin
           detector.validate_bond!(
             source_id: atom_c.id,
             target_id: atom_a.id,
             dependency_type: :blocks
           )
-        end.to raise_error do |error|
-          expect(error.cycle_path).not_to be_empty
+        rescue Eluent::Graph::CycleDetectedError => e
+          error = e
         end
+
+        expect(error).not_to be_nil
+        expect(error.cycle_path).not_to be_empty
       end
     end
   end

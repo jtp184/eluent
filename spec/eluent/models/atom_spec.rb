@@ -158,7 +158,7 @@ RSpec.describe Eluent::Models::Atom do
 
     it 'returns falsey when defer_until is nil' do
       atom = build(:atom, status: :deferred, defer_until: nil)
-      expect(atom.defer_future?).to be_falsey
+      expect(atom).not_to be_defer_future
     end
 
     it 'returns false when defer_until is in the past' do

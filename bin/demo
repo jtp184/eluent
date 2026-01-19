@@ -287,7 +287,7 @@ step 'Show ready bugs only'
 el 'ready --type bug'
 
 step 'Show ready items assigned to alice'
-el "ready --assignee alice"
+el 'ready --assignee alice'
 
 step 'Show ready items with backend label'
 el 'ready -l backend'

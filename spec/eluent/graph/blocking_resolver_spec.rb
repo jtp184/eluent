@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 RSpec.describe Eluent::Graph::BlockingResolver do
-  let(:indexer) { Eluent::Storage::Indexer.new }
-  let(:graph) { Eluent::Graph::DependencyGraph.new(indexer) }
   subject(:resolver) { described_class.new(indexer: indexer, dependency_graph: graph) }
 
+  let(:indexer) { Eluent::Storage::Indexer.new }
   let(:open_atom) { build(:atom, :open) }
   let(:closed_atom) { build(:atom, :closed) }
   let(:dependent_atom) { build(:atom, :open) }
+  let(:graph) { Eluent::Graph::DependencyGraph.new(indexer) }
 
   before do
     [open_atom, closed_atom, dependent_atom].each { |atom| indexer.index_atom(atom) }
@@ -15,9 +15,7 @@ RSpec.describe Eluent::Graph::BlockingResolver do
 
   describe 'FAILURE_PATTERN' do
     it 'matches failure reasons' do
-      %w[fail failure failed error abort aborted].each do |reason|
-        expect(reason).to match(described_class::FAILURE_PATTERN)
-      end
+      expect(%w[fail failure failed error abort aborted]).to all(match(described_class::FAILURE_PATTERN))
     end
 
     it 'does not match success reasons' do
@@ -43,111 +41,110 @@ RSpec.describe Eluent::Graph::BlockingResolver do
       end
     end
 
-    context 'with blocks dependency type' do
-      context 'when source is open' do
-        before do
-          indexer.index_bond(build(:bond, source_id: open_atom.id, target_id: dependent_atom.id, dependency_type: :blocks))
-        end
-
-        it 'returns blocked' do
-          result = resolver.blocked?(dependent_atom)
-          expect(result[:blocked]).to be true
-          expect(result[:blockers].first.source_id).to eq(open_atom.id)
-        end
+    context 'with blocks dependency type and open source' do
+      before do
+        indexer.index_bond(build(:bond, source_id: open_atom.id, target_id: dependent_atom.id,
+                                        dependency_type: :blocks))
       end
 
-      context 'when source is closed' do
-        before do
-          indexer.index_bond(build(:bond, source_id: closed_atom.id, target_id: dependent_atom.id, dependency_type: :blocks))
-        end
-
-        it 'returns not blocked' do
-          result = resolver.blocked?(dependent_atom)
-          expect(result[:blocked]).to be false
-        end
+      it 'returns blocked' do
+        result = resolver.blocked?(dependent_atom)
+        expect(result[:blocked]).to be true
+        expect(result[:blockers].first.source_id).to eq(open_atom.id)
       end
     end
 
-    context 'with conditional_blocks dependency type' do
+    context 'with blocks dependency type and closed source' do
+      before do
+        indexer.index_bond(build(:bond, source_id: closed_atom.id, target_id: dependent_atom.id,
+                                        dependency_type: :blocks))
+      end
+
+      it 'returns not blocked' do
+        result = resolver.blocked?(dependent_atom)
+        expect(result[:blocked]).to be false
+      end
+    end
+
+    context 'with conditional_blocks when source failed' do
       let(:failed_atom) { build(:atom, :closed, close_reason: 'failed') }
-      let(:success_atom) { build(:atom, :closed, close_reason: 'completed') }
 
       before do
         indexer.index_atom(failed_atom)
+        indexer.index_bond(build(:bond, source_id: failed_atom.id, target_id: dependent_atom.id,
+                                        dependency_type: :conditional_blocks))
+      end
+
+      it 'returns blocked' do
+        result = resolver.blocked?(dependent_atom)
+        expect(result[:blocked]).to be true
+      end
+    end
+
+    context 'with conditional_blocks when source succeeded' do
+      let(:success_atom) { build(:atom, :closed, close_reason: 'completed') }
+
+      before do
         indexer.index_atom(success_atom)
+        indexer.index_bond(build(:bond, source_id: success_atom.id, target_id: dependent_atom.id,
+                                        dependency_type: :conditional_blocks))
       end
 
-      context 'when source failed' do
-        before do
-          indexer.index_bond(build(:bond, source_id: failed_atom.id, target_id: dependent_atom.id, dependency_type: :conditional_blocks))
-        end
-
-        it 'returns blocked' do
-          result = resolver.blocked?(dependent_atom)
-          expect(result[:blocked]).to be true
-        end
-      end
-
-      context 'when source succeeded' do
-        before do
-          indexer.index_bond(build(:bond, source_id: success_atom.id, target_id: dependent_atom.id, dependency_type: :conditional_blocks))
-        end
-
-        it 'returns not blocked' do
-          result = resolver.blocked?(dependent_atom)
-          expect(result[:blocked]).to be false
-        end
-      end
-
-      context 'when source is still open' do
-        before do
-          indexer.index_bond(build(:bond, source_id: open_atom.id, target_id: dependent_atom.id, dependency_type: :conditional_blocks))
-        end
-
-        it 'returns not blocked' do
-          result = resolver.blocked?(dependent_atom)
-          expect(result[:blocked]).to be false
-        end
+      it 'returns not blocked' do
+        result = resolver.blocked?(dependent_atom)
+        expect(result[:blocked]).to be false
       end
     end
 
-    context 'with waits_for dependency type' do
-      context 'when source and all descendants are closed' do
-        let(:waits_source) { build(:atom, :closed) }
-        let(:waits_descendant) { build(:atom, :closed) }
-
-        before do
-          indexer.index_atom(waits_source)
-          indexer.index_atom(waits_descendant)
-          indexer.index_bond(build(:bond, source_id: waits_source.id, target_id: waits_descendant.id))
-          indexer.index_bond(build(:bond, source_id: waits_source.id, target_id: dependent_atom.id, dependency_type: :waits_for))
-        end
-
-        it 'returns not blocked' do
-          result = resolver.blocked?(dependent_atom)
-          expect(result[:blocked]).to be false
-        end
+    context 'with conditional_blocks when source is still open' do
+      before do
+        indexer.index_bond(build(:bond, source_id: open_atom.id, target_id: dependent_atom.id,
+                                        dependency_type: :conditional_blocks))
       end
 
-      context 'when source has open descendants' do
-        let(:waits_source) { build(:atom, :closed) }
-        let(:waits_open_descendant) { build(:atom, :open) }
-
-        before do
-          indexer.index_atom(waits_source)
-          indexer.index_atom(waits_open_descendant)
-          indexer.index_bond(build(:bond, source_id: waits_source.id, target_id: waits_open_descendant.id))
-          indexer.index_bond(build(:bond, source_id: waits_source.id, target_id: dependent_atom.id, dependency_type: :waits_for))
-        end
-
-        it 'returns blocked' do
-          result = resolver.blocked?(dependent_atom)
-          expect(result[:blocked]).to be true
-        end
+      it 'returns not blocked' do
+        result = resolver.blocked?(dependent_atom)
+        expect(result[:blocked]).to be false
       end
     end
 
-    context 'with parent_child blocking via parent_id' do
+    context 'with waits_for when source and all descendants are closed' do
+      let(:waits_source) { build(:atom, :closed) }
+      let(:waits_descendant) { build(:atom, :closed) }
+
+      before do
+        indexer.index_atom(waits_source)
+        indexer.index_atom(waits_descendant)
+        indexer.index_bond(build(:bond, source_id: waits_source.id, target_id: waits_descendant.id))
+        indexer.index_bond(build(:bond, source_id: waits_source.id, target_id: dependent_atom.id,
+                                        dependency_type: :waits_for))
+      end
+
+      it 'returns not blocked' do
+        result = resolver.blocked?(dependent_atom)
+        expect(result[:blocked]).to be false
+      end
+    end
+
+    context 'with waits_for when source has open descendants' do
+      let(:waits_source) { build(:atom, :closed) }
+      let(:waits_open_descendant) { build(:atom, :open) }
+
+      before do
+        indexer.index_atom(waits_source)
+        indexer.index_atom(waits_open_descendant)
+        indexer.index_bond(build(:bond, source_id: waits_source.id, target_id: waits_open_descendant.id))
+        indexer.index_bond(build(:bond, source_id: waits_source.id, target_id: dependent_atom.id,
+                                        dependency_type: :waits_for))
+      end
+
+      it 'returns blocked' do
+        result = resolver.blocked?(dependent_atom)
+        expect(result[:blocked]).to be true
+      end
+    end
+
+    context 'with parent_child blocking when parent is open' do
       let(:parent_atom) { build(:atom, :open) }
       let(:child_atom) { build(:atom, :open, parent_id: parent_atom.id) }
 
@@ -160,31 +157,37 @@ RSpec.describe Eluent::Graph::BlockingResolver do
         result = resolver.blocked?(child_atom)
         expect(result[:blocked]).to be true
       end
+    end
 
-      context 'when parent is closed' do
-        let(:parent_atom) { build(:atom, :closed) }
+    context 'with parent_child blocking when parent is closed' do
+      let(:parent_atom) { build(:atom, :closed) }
+      let(:child_atom) { build(:atom, :open, parent_id: parent_atom.id) }
 
-        it 'does not block child' do
-          result = resolver.blocked?(child_atom)
-          expect(result[:blocked]).to be false
-        end
+      before do
+        indexer.index_atom(parent_atom)
+        indexer.index_atom(child_atom)
       end
 
-      context 'with nested parent chain (grandparent -> parent -> child)' do
-        let(:grandparent_atom) { build(:atom, :open) }
-        let(:parent_atom) { build(:atom, :closed, parent_id: grandparent_atom.id) }
-        let(:child_atom) { build(:atom, :open, parent_id: parent_atom.id) }
+      it 'does not block child' do
+        result = resolver.blocked?(child_atom)
+        expect(result[:blocked]).to be false
+      end
+    end
 
-        before do
-          indexer.index_atom(grandparent_atom)
-          indexer.index_atom(parent_atom)
-          indexer.index_atom(child_atom)
-        end
+    context 'with nested parent chain (grandparent -> parent -> child)' do
+      let(:grandparent_atom) { build(:atom, :open) }
+      let(:parent_atom) { build(:atom, :closed, parent_id: grandparent_atom.id) }
+      let(:child_atom) { build(:atom, :open, parent_id: parent_atom.id) }
 
-        it 'does not block child when parent is closed (even if grandparent is open)' do
-          result = resolver.blocked?(child_atom)
-          expect(result[:blocked]).to be false
-        end
+      before do
+        indexer.index_atom(grandparent_atom)
+        indexer.index_atom(parent_atom)
+        indexer.index_atom(child_atom)
+      end
+
+      it 'does not block child when parent is closed (even if grandparent is open)' do
+        result = resolver.blocked?(child_atom)
+        expect(result[:blocked]).to be false
       end
     end
 

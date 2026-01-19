@@ -34,7 +34,7 @@ module Eluent
         items = indexer.all_atoms.select do |atom|
           ready_for_work?(atom, include_abstract: include_abstract) &&
             matches_filters?(atom, type: type, exclude_types: exclude_types,
-                             assignee: assignee, labels: labels, priority: priority)
+                                   assignee: assignee, labels: labels, priority: priority)
         end
 
         sort_items(items, policy: sort)
@@ -67,16 +67,15 @@ module Eluent
         when Models::IssueType then type.name
         when Symbol then type
         when String then type.to_sym
-        else type
+        else type.respond_to?(:to_sym) ? type.to_sym : type
         end
       end
 
       def sort_items(items, policy:)
         case policy.to_sym
-        when :priority then sort_by_priority(items)
+        when :priority, :default then sort_by_priority(items)
         when :oldest then sort_by_oldest(items)
         when :hybrid then sort_by_hybrid(items)
-        else sort_by_priority(items)
         end
       end
 

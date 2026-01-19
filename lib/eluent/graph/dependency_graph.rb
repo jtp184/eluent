@@ -33,7 +33,7 @@ module Eluent
       def all_descendants(atom_id, blocking_only: true)
         return Set.new if atom_id.nil?
 
-        traverse_bfs(atom_id, blocking_only: blocking_only) do |current|
+        traverse_bfs(atom_id) do |current|
           outgoing_bonds(current, blocking_only: blocking_only).map(&:target_id)
         end
       end
@@ -42,7 +42,7 @@ module Eluent
       def all_ancestors(atom_id, blocking_only: true)
         return Set.new if atom_id.nil?
 
-        traverse_bfs(atom_id, blocking_only: blocking_only) do |current|
+        traverse_bfs(atom_id) do |current|
           incoming_bonds(current, blocking_only: blocking_only).map(&:source_id)
         end
       end
@@ -61,7 +61,7 @@ module Eluent
 
       attr_reader :indexer
 
-      def traverse_bfs(start_id, blocking_only:)
+      def traverse_bfs(start_id)
         visited = Set.new
         queue = [start_id]
 

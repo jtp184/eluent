@@ -183,7 +183,6 @@ module Eluent
             puts
           end
         end
-
       end
     end
   end
