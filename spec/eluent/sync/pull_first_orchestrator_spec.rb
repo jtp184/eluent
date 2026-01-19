@@ -28,12 +28,11 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
     FakeFS::FileSystem.clear
     setup_eluent_directory(root_path)
 
-    allow(git_adapter).to receive(:remote?).and_return(true)
-    allow(git_adapter).to receive(:repo_path).and_return(root_path)
+    allow(git_adapter).to receive_messages(remote?: true, repo_path: root_path)
 
     # FakeFS doesn't support flock, so we stub the lock behavior
     allow(File).to receive(:open).and_call_original
-    allow_any_instance_of(File).to receive(:flock).and_return(true)
+    allow_any_instance_of(File).to receive(:flock).and_return(true) # rubocop:disable RSpec/AnyInstance
   end
 
   after { FakeFS.deactivate! }
@@ -81,7 +80,9 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
     context 'when another sync is in progress' do
       it 'raises SyncInProgressError' do
         # Simulate another process holding the lock
+        # rubocop:disable RSpec/AnyInstance
         allow_any_instance_of(File).to receive(:flock).with(File::LOCK_EX | File::LOCK_NB).and_return(false)
+        # rubocop:enable RSpec/AnyInstance
 
         expect do
           orchestrator.sync
@@ -94,8 +95,7 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
 
       before do
         allow(git_adapter).to receive(:fetch)
-        allow(git_adapter).to receive(:remote_head).and_return(commit_hash)
-        allow(git_adapter).to receive(:current_commit).and_return(commit_hash)
+        allow(git_adapter).to receive_messages(remote_head: commit_hash, current_commit: commit_hash)
         allow(sync_state).to receive(:base_commit).and_return(commit_hash)
       end
 
@@ -122,11 +122,10 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
     context 'with push_only mode' do
       before do
         allow(git_adapter).to receive(:fetch)
-        allow(git_adapter).to receive(:clean?).and_return(false)
         allow(git_adapter).to receive(:add)
         allow(git_adapter).to receive(:commit)
         allow(git_adapter).to receive(:push)
-        allow(git_adapter).to receive(:current_commit).and_return('new_commit')
+        allow(git_adapter).to receive_messages(clean?: false, current_commit: 'new_commit')
         allow(repository).to receive(:list_atoms).with(status: 'in_progress').and_return([])
       end
 
@@ -138,15 +137,13 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
         expect(result.success?).to be true
       end
 
-      context 'when dry_run is true' do
-        it 'does not commit or push' do
-          result = orchestrator.sync(push_only: true, dry_run: true)
+      it 'does not commit or push with dry_run' do
+        result = orchestrator.sync(push_only: true, dry_run: true)
 
-          expect(git_adapter).not_to have_received(:add)
-          expect(git_adapter).not_to have_received(:commit)
-          expect(git_adapter).not_to have_received(:push)
-          expect(result.success?).to be true
-        end
+        expect(git_adapter).not_to have_received(:add)
+        expect(git_adapter).not_to have_received(:commit)
+        expect(git_adapter).not_to have_received(:push)
+        expect(result.success?).to be true
       end
     end
 
@@ -155,30 +152,26 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
       let(:remote_commit) { 'remote456' }
       let(:base_commit) { 'base789' }
       let(:local_atom) { build(:atom, id: 'testrepo-LOCALATOM0000000') }
-      let(:remote_atom) { build(:atom, id: 'testrepo-REMOTEATOM000000') }
 
       before do
         allow(git_adapter).to receive(:fetch)
-        allow(git_adapter).to receive(:remote_head).and_return(remote_commit)
         allow(git_adapter).to receive(:current_commit).and_return(local_commit, 'after_commit')
-        allow(git_adapter).to receive(:merge_base).and_return(base_commit)
-        allow(git_adapter).to receive(:show_file_at_commit).and_return('')
-        allow(git_adapter).to receive(:clean?).and_return(false)
+        allow(git_adapter).to receive_messages(remote_head: remote_commit, merge_base: base_commit,
+                                               show_file_at_commit: '', clean?: false)
         allow(git_adapter).to receive(:add)
         allow(git_adapter).to receive(:commit)
         allow(git_adapter).to receive(:push)
 
-        allow(sync_state).to receive(:base_commit).and_return(nil)
-        allow(sync_state).to receive(:update).and_return(sync_state)
+        allow(sync_state).to receive_messages(base_commit: nil, update: sync_state)
         allow(sync_state).to receive(:save)
 
         allow(repository).to receive(:load!)
         allow(repository).to receive(:list_atoms).with(status: 'in_progress').and_return([])
 
         write_jsonl_records(paths.data_file, [
-                             { _type: 'header', repo_name: 'testrepo' },
-                             local_atom.to_h
-                           ])
+                              { _type: 'header', repo_name: 'testrepo' },
+                              local_atom.to_h
+                            ])
       end
 
       it 'performs full sync workflow' do
@@ -191,46 +184,38 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
         expect(result.success?).to be true
       end
 
-      context 'with pull_only mode' do
-        it 'does not push changes' do
-          result = orchestrator.sync(pull_only: true)
+      it 'does not push changes with pull_only mode' do
+        result = orchestrator.sync(pull_only: true)
 
-          expect(git_adapter).to have_received(:fetch)
-          expect(git_adapter).not_to have_received(:push)
-          expect(result.success?).to be true
-        end
+        expect(git_adapter).to have_received(:fetch)
+        expect(git_adapter).not_to have_received(:push)
+        expect(result.success?).to be true
       end
 
-      context 'with dry_run mode' do
-        it 'does not write changes to disk' do
-          original_content = File.read(paths.data_file)
+      it 'does not write changes to disk with dry_run mode' do
+        original_content = File.read(paths.data_file)
 
-          result = orchestrator.sync(dry_run: true)
+        result = orchestrator.sync(dry_run: true)
 
-          expect(File.read(paths.data_file)).to eq(original_content)
-          expect(git_adapter).not_to have_received(:push)
-          expect(result.success?).to be true
-        end
-
-        it 'returns computed changes' do
-          result = orchestrator.sync(dry_run: true)
-
-          expect(result.changes).to be_an(Array)
-          expect(result.commits).to be_empty
-        end
+        expect(File.read(paths.data_file)).to eq(original_content)
+        expect(git_adapter).not_to have_received(:push)
+        expect(result.success?).to be true
       end
 
-      context 'when working directory is clean after merge' do
-        before do
-          allow(git_adapter).to receive(:clean?).and_return(true)
-        end
+      it 'returns computed changes with dry_run mode' do
+        result = orchestrator.sync(dry_run: true)
 
-        it 'does not push' do
-          result = orchestrator.sync
+        expect(result.changes).to be_an(Array)
+        expect(result.commits).to be_empty
+      end
 
-          expect(git_adapter).not_to have_received(:push)
-          expect(result.success?).to be true
-        end
+      it 'does not push when working directory is clean after merge' do
+        allow(git_adapter).to receive(:clean?).and_return(true)
+
+        result = orchestrator.sync
+
+        expect(git_adapter).not_to have_received(:push)
+        expect(result.success?).to be true
       end
     end
 
@@ -242,17 +227,14 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
 
       before do
         allow(git_adapter).to receive(:fetch)
-        allow(git_adapter).to receive(:remote_head).and_return(remote_commit)
         allow(git_adapter).to receive(:current_commit).and_return(local_commit, 'after_commit')
-        allow(git_adapter).to receive(:merge_base).and_return('base')
-        allow(git_adapter).to receive(:show_file_at_commit).and_return('')
-        allow(git_adapter).to receive(:clean?).and_return(false)
+        allow(git_adapter).to receive_messages(remote_head: remote_commit, merge_base: 'base', show_file_at_commit: '',
+                                               clean?: false)
         allow(git_adapter).to receive(:add)
         allow(git_adapter).to receive(:commit)
         allow(git_adapter).to receive(:push)
 
-        allow(sync_state).to receive(:base_commit).and_return(nil)
-        allow(sync_state).to receive(:update).and_return(sync_state)
+        allow(sync_state).to receive_messages(base_commit: nil, update: sync_state)
         allow(sync_state).to receive(:save)
 
         allow(repository).to receive(:load!)
@@ -285,11 +267,8 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
 
       before do
         allow(git_adapter).to receive(:fetch)
-        allow(git_adapter).to receive(:remote_head).and_return(remote_commit)
-        allow(git_adapter).to receive(:current_commit).and_return(local_commit)
-        allow(git_adapter).to receive(:merge_base).and_return('base')
-        allow(git_adapter).to receive(:show_file_at_commit).and_return('')
-        allow(git_adapter).to receive(:clean?).and_return(false)
+        allow(git_adapter).to receive_messages(remote_head: remote_commit, current_commit: local_commit,
+                                               merge_base: 'base', show_file_at_commit: '', clean?: false)
         allow(git_adapter).to receive(:add)
         allow(git_adapter).to receive(:commit).and_raise(StandardError, 'Commit failed')
 
@@ -299,13 +278,13 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
         allow(repository).to receive(:list_atoms).with(status: 'in_progress').and_return([])
 
         write_jsonl_records(paths.data_file, [
-                             { _type: 'header', repo_name: 'testrepo' },
-                             { _type: 'atom', id: 'original', title: 'Original' }
-                           ])
+                              { _type: 'header', repo_name: 'testrepo' },
+                              { _type: 'atom', id: 'original', title: 'Original' }
+                            ])
       end
 
       it 'restores backup on failure' do
-        original_content = File.read(paths.data_file)
+        File.read(paths.data_file)
 
         expect { orchestrator.sync }.to raise_error(StandardError, 'Commit failed')
 
@@ -328,17 +307,14 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
 
       before do
         allow(git_adapter).to receive(:fetch)
-        allow(git_adapter).to receive(:remote_head).and_return(remote_commit)
         allow(git_adapter).to receive(:current_commit).and_return(local_commit, 'after_commit')
-        allow(git_adapter).to receive(:merge_base).and_return('base')
-        allow(git_adapter).to receive(:show_file_at_commit).and_return('')
-        allow(git_adapter).to receive(:clean?).and_return(false)
+        allow(git_adapter).to receive_messages(remote_head: remote_commit, merge_base: 'base', show_file_at_commit: '',
+                                               clean?: false)
         allow(git_adapter).to receive(:add)
         allow(git_adapter).to receive(:commit)
         allow(git_adapter).to receive(:push)
 
-        allow(sync_state).to receive(:base_commit).and_return(nil)
-        allow(sync_state).to receive(:update).and_return(sync_state)
+        allow(sync_state).to receive_messages(base_commit: nil, update: sync_state)
         allow(sync_state).to receive(:save)
 
         allow(repository).to receive(:load!)
@@ -348,25 +324,25 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
       end
 
       it 'warns about in-progress items' do
-        expect(orchestrator).to receive(:warn).with(/1 items in progress/)
+        allow(orchestrator).to receive(:warn)
         orchestrator.sync
+        expect(orchestrator).to have_received(:warn).with(/1 items in progress/)
       end
 
       it 'proceeds with force flag without warning' do
-        expect(orchestrator).not_to receive(:warn).with(/in progress/)
+        allow(orchestrator).to receive(:warn)
         orchestrator.sync(force: true)
+        expect(orchestrator).not_to have_received(:warn).with(/in progress/)
       end
     end
 
     context 'when commit fails with nothing to commit' do
       before do
-        allow(git_adapter).to receive(:remote?).and_return(true)
-        allow(git_adapter).to receive(:clean?).and_return(false)
         allow(git_adapter).to receive(:add)
         allow(git_adapter).to receive(:commit).and_raise(
           Eluent::Sync::GitError.new('nothing to commit', command: 'git commit')
         )
-        allow(git_adapter).to receive(:current_commit).and_return(nil)
+        allow(git_adapter).to receive_messages(remote?: true, clean?: false, current_commit: nil)
         allow(repository).to receive(:list_atoms).with(status: 'in_progress').and_return([])
       end
 
@@ -385,13 +361,10 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
 
     before do
       allow(git_adapter).to receive(:fetch)
-      allow(git_adapter).to receive(:remote_head).and_return(remote_commit)
       allow(git_adapter).to receive(:current_commit).and_return(local_commit, 'after_commit')
-      allow(git_adapter).to receive(:merge_base).and_return('base')
-      allow(git_adapter).to receive(:clean?).and_return(true)
+      allow(git_adapter).to receive_messages(remote_head: remote_commit, merge_base: 'base', clean?: true)
 
-      allow(sync_state).to receive(:base_commit).and_return(nil)
-      allow(sync_state).to receive(:update).and_return(sync_state)
+      allow(sync_state).to receive_messages(base_commit: nil, update: sync_state)
       allow(sync_state).to receive(:save)
 
       allow(repository).to receive(:load!)
@@ -400,7 +373,7 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
     context 'with malformed JSON in remote' do
       before do
         # Single line of malformed JSON
-        malformed = "{ this is not valid json }"
+        malformed = '{ this is not valid json }'
         allow(git_adapter).to receive(:show_file_at_commit).and_return(malformed)
 
         write_jsonl_records(paths.data_file, [{ _type: 'header', repo_name: 'testrepo' }])
@@ -408,8 +381,8 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
 
       it 'warns about skipped records' do
         allow(orchestrator).to receive(:warn)
-        expect(orchestrator).to receive(:warn).with(/skipping malformed JSON line/).at_least(:once)
         orchestrator.sync
+        expect(orchestrator).to have_received(:warn).with(/skipping malformed JSON line/).at_least(:once)
       end
 
       it 'continues processing valid records' do
@@ -430,8 +403,9 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
 
       it 'warns about total skipped count' do
         allow(orchestrator).to receive(:warn)
-        expect(orchestrator).to receive(:warn).with(/3 record\(s\) skipped due to data corruption/)
         orchestrator.sync
+        expect(orchestrator).to have_received(:warn)
+          .with(/3 record\(s\) skipped due to data corruption/).at_least(:once)
       end
     end
 
@@ -450,10 +424,9 @@ RSpec.describe Eluent::Sync::PullFirstOrchestrator, :filesystem do
       end
     end
   end
-
 end
 
-RSpec.describe Eluent::Sync::PullFirstOrchestrator, 'change detection' do
+RSpec.describe Eluent::Sync::PullFirstOrchestrator do
   let(:root_path) { '/project' }
   let(:paths) { Eluent::Storage::Paths.new(root_path) }
   let(:git_adapter) { instance_double(Eluent::Sync::GitAdapter) }
