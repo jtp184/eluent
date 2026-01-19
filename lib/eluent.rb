@@ -41,3 +41,20 @@ require_relative 'eluent/graph/blocking_resolver'
 
 # Lifecycle
 require_relative 'eluent/lifecycle/readiness_calculator'
+
+# Sync
+require_relative 'eluent/sync/sync_state'
+require_relative 'eluent/sync/git_adapter'
+require_relative 'eluent/sync/conflict_resolver'
+require_relative 'eluent/sync/merge_engine'
+require_relative 'eluent/sync/pull_first_orchestrator'
+
+# Registry extensions
+require_relative 'eluent/registry/repo_registry'
+require_relative 'eluent/registry/repo_context'
+
+# Daemon
+require_relative 'eluent/daemon/protocol'
+require_relative 'eluent/daemon/client'
+require_relative 'eluent/daemon/command_router'
+require_relative 'eluent/daemon/server'

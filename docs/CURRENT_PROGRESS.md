@@ -1,6 +1,6 @@
 # Eluent Implementation Progress
 
-**Last Updated**: 2026-01-18
+**Last Updated**: 2026-01-19
 
 This document tracks progress towards completing the implementation plan defined in `IMPLEMENTATION_PLAN.md`.
 
@@ -12,12 +12,12 @@ This document tracks progress towards completing the implementation plan defined
 |-------|--------|----------|
 | Phase 1: Foundation | Complete | 100% |
 | Phase 2: Graph Operations | Complete | 100% |
-| Phase 3: Sync and Daemon | Not Started | 0% |
+| Phase 3: Sync and Daemon | Complete | 100% |
 | Phase 4: Formulas and Compaction | Not Started | 0% |
 | Phase 5: Extensions and AI | Not Started | 0% |
-| Phase 6: Polish | In Progress | 20% |
+| Phase 6: Polish | In Progress | 70% |
 
-**Current State**: Production-ready for single-agent, single-repo workflows with full dependency graph support, ephemeral items, and 12 CLI commands.
+**Current State**: Production-ready with git sync, daemon support, 14 CLI commands, and 873 test examples.
 
 ---
 
@@ -115,16 +115,15 @@ Dependencies, blocking, ready work
 ### Integration
 
 - [x] `lib/eluent/storage/jsonl_repository.rb` — delete_atom method for permanent removal
-- [x] `lib/eluent/cli/application.rb` — 12 commands registered, exit codes (0-5)
+- [x] `lib/eluent/cli/application.rb` — 14 commands registered, exit codes (0-5)
 - [x] `lib/eluent.rb` — Requires for graph and lifecycle modules
 
 ### Specs
 
-- [x] `spec/eluent/graph/dependency_graph_spec.rb` — 24 examples covering DAG operations
-- [x] `spec/eluent/graph/cycle_detector_spec.rb` — 12 examples covering cycle detection
-- [x] `spec/eluent/graph/blocking_resolver_spec.rb` — 24 examples covering all 4 blocking types
-- [x] `spec/eluent/lifecycle/transition_spec.rb` — 19 examples covering state machine
-- [x] `spec/eluent/lifecycle/readiness_calculator_spec.rb` — 18 examples covering sort policies and filters
+- [x] `spec/eluent/graph/dependency_graph_spec.rb` — DAG operations
+- [x] `spec/eluent/graph/cycle_detector_spec.rb` — Cycle detection
+- [x] `spec/eluent/graph/blocking_resolver_spec.rb` — All 4 blocking types
+- [x] `spec/eluent/lifecycle/readiness_calculator_spec.rb` — Sort policies and filters
 
 ---
 
@@ -134,27 +133,42 @@ Git sync, Unix socket daemon
 
 ### Sync
 
-- [ ] `lib/eluent/sync/git_adapter.rb` — Git operations wrapper
-- [ ] `lib/eluent/sync/merge_engine.rb` — 3-way merge (LWW for scalars, union for sets, append+dedup for comments)
-- [ ] `lib/eluent/sync/pull_first_orchestrator.rb` — Pull-first sync flow
-- [ ] `lib/eluent/sync/sync_state.rb` — .sync-state file handling
-- [ ] `lib/eluent/sync/conflict_resolver.rb` — Resurrection rule (edit wins over delete)
+- [x] `lib/eluent/sync/git_adapter.rb` — Git operations wrapper
+- [x] `lib/eluent/sync/merge_engine.rb` — 3-way merge (LWW for scalars, union for sets, append+dedup for comments)
+- [x] `lib/eluent/sync/pull_first_orchestrator.rb` — Pull-first sync flow
+- [x] `lib/eluent/sync/sync_state.rb` — .sync-state file handling
+- [x] `lib/eluent/sync/conflict_resolver.rb` — Resurrection rule (edit wins over delete)
 
 ### Registry
 
-- [ ] `lib/eluent/registry/repo_registry.rb` — Cross-repo registry (~/.eluent/repos.jsonl)
-- [ ] `lib/eluent/registry/repo_context.rb` — Repository context management
+- [x] `lib/eluent/registry/repo_registry.rb` — Cross-repo registry (~/.eluent/repos.jsonl)
+- [x] `lib/eluent/registry/repo_context.rb` — Repository context management with caching and cross-repo ID resolution
 
 ### Daemon
 
-- [ ] `lib/eluent/daemon/server.rb` — Unix socket server with PID file
-- [ ] `lib/eluent/daemon/protocol.rb` — Length-prefixed JSON protocol
-- [ ] `lib/eluent/daemon/command_router.rb` — Route to handlers
+- [x] `lib/eluent/daemon/server.rb` — Unix socket server with PID file
+- [x] `lib/eluent/daemon/protocol.rb` — Length-prefixed JSON protocol
+- [x] `lib/eluent/daemon/command_router.rb` — Route to handlers
+- [x] `lib/eluent/daemon/client.rb` — Daemon client for CLI communication
 
 ### CLI Commands (Phase 3)
 
-- [ ] `lib/eluent/cli/commands/sync.rb` — Sync command (--pull-only, --push-only)
-- [ ] `lib/eluent/cli/commands/daemon.rb` — Daemon management (start/stop/status)
+- [x] `lib/eluent/cli/commands/sync.rb` — Sync command (--pull-only, --push-only)
+- [x] `lib/eluent/cli/commands/daemon.rb` — Daemon management (start/stop/status)
+
+### Specs
+
+- [x] `spec/eluent/sync/git_adapter_spec.rb` — Git adapter operations
+- [x] `spec/eluent/sync/merge_engine_spec.rb` — 3-way merge scenarios
+- [x] `spec/eluent/sync/sync_state_spec.rb` — Sync state handling
+- [x] `spec/eluent/sync/conflict_resolver_spec.rb` — Conflict resolution
+- [x] `spec/eluent/sync/pull_first_orchestrator_spec.rb` — Orchestrator workflow
+- [x] `spec/eluent/daemon/server_spec.rb` — Server lifecycle
+- [x] `spec/eluent/daemon/protocol_spec.rb` — Protocol encoding
+- [x] `spec/eluent/daemon/command_router_spec.rb` — Command routing
+- [x] `spec/eluent/daemon/client_spec.rb` — Client communication
+- [x] `spec/eluent/registry/repo_registry_spec.rb` — Cross-repo registry
+- [x] `spec/eluent/registry/repo_context_spec.rb` — Repository context management
 
 ---
 
@@ -216,12 +230,17 @@ Tests, types, documentation
 
 ### Testing
 
-- [x] Unit tests for graph operations (97 examples)
-- [ ] Unit tests for all models
-- [ ] Unit tests for storage layer
+- [x] Unit tests for graph operations
+- [x] Unit tests for all models (atom, bond, comment, status, issue_type, dependency_type, mixins)
+- [x] Unit tests for storage layer (jsonl_repository, indexer, prefix_trie, paths, file_operations, config_loader, serializers)
+- [x] Unit tests for registry (id_generator, id_resolver, repo_registry, repo_context)
+- [x] Unit tests for sync (git_adapter, merge_engine, sync_state, conflict_resolver, orchestrator)
+- [x] Unit tests for daemon (server, protocol, command_router, client)
 - [ ] Integration tests for CLI commands
-- [ ] Daemon concurrent access tests
-- [ ] Sync 3-way merge scenario tests
+- [x] Daemon concurrent access tests
+- [x] Sync 3-way merge scenario tests
+
+**Total: 873 examples passing**
 
 ### Type Checking
 

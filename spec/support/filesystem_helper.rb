@@ -2,6 +2,11 @@
 
 require 'fakefs/spec_helpers'
 
+# Pre-load Faker's I18n translations before FakeFS intercepts filesystem calls.
+# This ensures locale files are cached in memory and accessible during FakeFS tests.
+Faker::Name.name
+Faker::Lorem.sentence
+
 # Helpers for filesystem-based tests using FakeFS
 module FilesystemHelper
   def setup_eluent_directory(root = '/project')
