@@ -27,9 +27,17 @@ module Eluent
         [length].pack(LENGTH_PREFIX_FORMAT) + json
       end
 
-      # Read and parse a message from IO
+      # Read and parse a message from IO.
+      #
+      # Error handling is intentionally asymmetric:
+      # - Length prefix returns nil on clean EOF (client disconnected gracefully)
+      # - Message body raises ProtocolError on EOF (client disconnected mid-message)
+      #
+      # This allows the server to distinguish between:
+      # - Normal disconnection (nil return, handled silently)
+      # - Protocol violation (exception, may warrant logging)
       def decode(io)
-        # Read length prefix
+        # Read length prefix - nil means clean EOF (client disconnected)
         length_bytes = read_exact(io, LENGTH_PREFIX_SIZE, error_message: 'Incomplete length prefix')
         return nil if length_bytes.nil?
 
@@ -40,7 +48,7 @@ module Eluent
                 "Message size #{length} exceeds maximum #{MAX_MESSAGE_SIZE}"
         end
 
-        # Read message body
+        # Read message body - nil here means truncated message (protocol error)
         json = read_exact(io, length, error_message: 'Incomplete message body')
         raise ProtocolError, 'Incomplete message body' if json.nil?
 

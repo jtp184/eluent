@@ -5,14 +5,20 @@ module Eluent
     # 3-way merge algorithm for sync
     # Single responsibility: merge base, local, and remote states
     class MergeEngine
-      # Scalar fields use Last-Write-Wins by updated_at
+      # Scalar fields use Last-Write-Wins (LWW) by updated_at.
+      # These represent single values where only one can be "correct" - when both sides
+      # modify the same field, we take the most recent change.
       SCALAR_FIELDS = %i[title description status issue_type priority assignee parent_id defer_until
                          close_reason].freeze
 
-      # Set fields use union merge
+      # Set fields use union merge with deletion tracking.
+      # Labels are additive by nature - both sides can add labels independently,
+      # and explicit removals should be preserved.
       SET_FIELDS = %i[labels].freeze
 
-      # Deep merge fields
+      # Deep merge fields recurse into nested hashes.
+      # Metadata is extensible key-value data where different keys can be
+      # modified independently by each side.
       DEEP_MERGE_FIELDS = %i[metadata].freeze
 
       MergeResult = Struct.new(:atoms, :bonds, :comments, :conflicts, keyword_init: true)
@@ -70,7 +76,7 @@ module Eluent
           local = local_by_id[id]
           remote = remote_by_id[id]
 
-          result = merge_single_atom(base: base, local: local, remote: remote)
+          result = resolve_atom_outcome(base: base, local: local, remote: remote)
 
           case result
           in { atom: atom } if atom
@@ -85,7 +91,9 @@ module Eluent
         [merged, conflicts]
       end
 
-      def merge_single_atom(base:, local:, remote:)
+      # Decides what to do with an atom: keep local, keep remote, merge, or delete.
+      # Returns a hash with :atom key (the result) or :conflict key (if unresolvable).
+      def resolve_atom_outcome(base:, local:, remote:)
         # New in local only
         return { atom: local } if base.nil? && remote.nil? && local
 
@@ -106,11 +114,13 @@ module Eluent
         when ConflictResolver::RESOLUTION_KEEP_REMOTE
           { atom: remote }
         when ConflictResolver::RESOLUTION_MERGE
-          { atom: merge_atom_fields(base: base, local: local, remote: remote) }
+          { atom: build_merged_atom(base: base, local: local, remote: remote) }
         end
       end
 
-      def merge_atom_fields(base:, local:, remote:)
+      # Constructs a new merged atom by combining fields from base, local, and remote.
+      # Uses different strategies per field type: LWW for scalars, union for sets, deep merge for metadata.
+      def build_merged_atom(base:, local:, remote:)
         # Build merged hash starting from local as base
         merged_attrs = { id: local.id }
 
@@ -148,26 +158,32 @@ module Eluent
         Models::Atom.new(**merged_attrs)
       end
 
+      # Merge scalar field using precedence order:
+      # 1. If no remote exists, use local (local-only change)
+      # 2. If values match, use either (no conflict)
+      # 3. If local unchanged from base, use remote (remote modified it)
+      # 4. If remote unchanged from base, use local (local modified it)
+      # 5. If both changed, use Last-Write-Wins by updated_at timestamp
       def merge_scalar(field:, base:, local:, remote:)
         local_val = local.send(field)
         remote_val = remote&.send(field)
         base_val = base&.send(field)
 
-        # No remote - use local
+        # 1. No remote - use local
         return local_val if remote.nil?
 
-        # Values are the same - no conflict
+        # 2. Values are the same - no conflict
         return local_val if values_equal?(local_val, remote_val)
 
-        # Local unchanged from base - take remote
+        # 3. Local unchanged from base - take remote
         return remote_val if values_equal?(local_val, base_val)
 
-        # Remote unchanged from base - take local
+        # 4. Remote unchanged from base - take local
         return local_val if values_equal?(remote_val, base_val)
 
-        # Both changed - LWW by updated_at
-        local_time = local.updated_at || Time.at(0).utc
-        remote_time = remote.updated_at || Time.at(0).utc
+        # 5. Both changed - LWW by updated_at
+        local_time = local.updated_at || ConflictResolver::FALLBACK_TIME
+        remote_time = remote.updated_at || ConflictResolver::FALLBACK_TIME
 
         remote_time > local_time ? remote_val : local_val
       end
@@ -194,19 +210,28 @@ module Eluent
         result
       end
 
+      # Deep merge metadata hashes with remote-wins precedence.
+      # Processing order determines conflict resolution:
+      # 1. Start with base (common ancestor)
+      # 2. Apply local changes (overwrites base)
+      # 3. Apply remote changes (overwrites local for same keys)
+      # This gives remote the final say on conflicting scalar keys,
+      # while nested hashes recurse to merge their contents.
       def deep_merge_metadata(base:, local:, remote:)
-        # Simple deep merge - remote wins on conflicts
         merged = deep_dup_hash(base)
 
+        # Apply local changes over base
         local.each do |k, v|
           merged[k] = v
         end
 
+        # Apply remote changes over local (remote wins on conflicts)
         remote.each do |k, v|
           merged[k] = if merged.key?(k) && merged[k].is_a?(Hash) && v.is_a?(Hash)
+                        # Both sides have nested hash - recurse to merge contents
                         deep_merge_metadata(base: base[k] || {}, local: merged[k], remote: v)
                       else
-                        # LWW - remote wins since it's processed last
+                        # Scalar value - remote wins since it's processed last
                         v
                       end
         end

@@ -5,13 +5,19 @@ module Eluent
     # Routes daemon requests to appropriate handlers
     # Single responsibility: dispatch commands to handlers
     class CommandRouter
-      COMMANDS = %w[ping list show create update close reopen ready sync comment dep].freeze
+      COMMANDS = %w[ping list show create update close reopen ready sync comment bond].freeze
 
       def initialize(repo_cache: {})
         @repo_cache = repo_cache
         @mutex = Mutex.new
       end
 
+      # Dispatch a request to the appropriate handler.
+      #
+      # @param request [Hash] Must contain :cmd (command name), :id (request ID),
+      #   and optionally :args (command-specific arguments).
+      # @return [Hash] Response with :id, :status ('ok' or 'error'), and either
+      #   :data (on success) or :error (on failure) containing :code and :message.
       def route(request)
         id = request[:id]
         cmd = request[:cmd]
@@ -90,7 +96,13 @@ module Eluent
 
         raise Registry::IdNotFoundError, args[:id] unless atom
 
-        # Apply updates
+        # Updatable fields (metaprogrammatically applied via send):
+        # - title, description: free-form text
+        # - status, issue_type: enumerated values
+        # - priority, assignee: optional scalar values
+        # - labels: array of strings
+        # - parent_id: hierarchy reference
+        # - defer_until, close_reason: lifecycle fields
         %i[title description status issue_type priority assignee labels parent_id defer_until
            close_reason].each do |field|
           atom.send("#{field}=", args[field]) if args.key?(field)
@@ -183,7 +195,7 @@ module Eluent
         Protocol.build_success(id: id, data: { comment: comment.to_h })
       end
 
-      def handle_dep(args, id)
+      def handle_bond(args, id)
         repo = get_repository(args[:repo_path])
 
         if args[:remove]

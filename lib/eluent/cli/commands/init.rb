@@ -32,7 +32,7 @@ module Eluent
 
           repo = Storage::JsonlRepository.new(Dir.pwd)
 
-          return error('REPO_EXISTS', ".eluent already exists in #{Dir.pwd}") if repo.initialized?
+          return error('REPO_EXISTS', ".eluent already exists in #{Dir.pwd}") if repo.data_file_exists?
 
           repo.init(repo_name: params[:name])
 

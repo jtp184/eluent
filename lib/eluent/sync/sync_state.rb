@@ -6,8 +6,15 @@ require 'time'
 
 module Eluent
   module Sync
-    # Manages .sync-state file for tracking sync status
-    # Single responsibility: persist and retrieve sync state
+    # Manages .sync-state file for tracking sync status.
+    # Single responsibility: persist and retrieve sync state.
+    #
+    # Fields:
+    #   last_sync_at  - Timestamp of the last successful sync operation.
+    #   base_commit   - The common ancestor commit used for 3-way merge.
+    #                   After sync, this becomes the new merge base for next sync.
+    #   local_head    - The local commit SHA after last sync completed.
+    #   remote_head   - The remote commit SHA that was merged in last sync.
     class SyncState
       attr_reader :last_sync_at, :base_commit, :local_head, :remote_head
 

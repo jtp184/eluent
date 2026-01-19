@@ -29,7 +29,8 @@ module Eluent
       def register(name:, path:, remote: nil)
         load_entries
 
-        # Remove existing entry with same name or path
+        # Enforce uniqueness: both name and path must be unique across all entries.
+        # Re-registering with an existing name or path replaces the old entry.
         entries.reject! { |e| e.name == name || e.path == path }
 
         entry = Entry.new(
@@ -57,7 +58,7 @@ module Eluent
         found
       end
 
-      def find(name)
+      def find_by_name(name)
         load_entries
         entries.find { |e| e.name == name }
       end
@@ -68,7 +69,7 @@ module Eluent
       end
 
       def path_for(name)
-        entry = find(name)
+        entry = find_by_name(name)
         entry&.path
       end
 
@@ -79,7 +80,7 @@ module Eluent
       end
 
       def exists?(name)
-        !find(name).nil?
+        !find_by_name(name).nil?
       end
 
       private
@@ -103,8 +104,8 @@ module Eluent
             remote: data[:remote],
             registered_at: parse_time(data[:registered_at])
           )
-        rescue JSON::ParserError
-          # Skip malformed lines
+        rescue JSON::ParserError => e
+          warn "el: warning: skipping malformed registry entry: #{e.message}"
         end
       end
 

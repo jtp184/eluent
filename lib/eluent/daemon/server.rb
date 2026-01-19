@@ -81,10 +81,25 @@ module Eluent
         graceful_shutdown
       end
 
+      # Double-fork daemonization pattern:
+      #
+      # 1. First fork: Parent continues, child becomes intermediate process.
+      #    Parent waits briefly to verify daemon started (checks for PID file).
+      #
+      # 2. setsid: Child becomes session leader, detaching from controlling terminal.
+      #
+      # 3. Second fork: Intermediate exits, grandchild continues as daemon.
+      #    This prevents the daemon from ever acquiring a controlling terminal
+      #    (session leaders can acquire terminals, but non-leaders cannot).
+      #
+      # 4. Redirect stdio: stdin from /dev/null, stdout/stderr to log file.
+      #    This prevents unexpected I/O and captures daemon output.
+      #
+      # 5. chdir('/'): Avoid holding references to mounted filesystems.
       def daemonize
         ensure_eluent_dir
 
-        # Fork once
+        # First fork: create intermediate process
         if fork
           # Parent waits briefly to check startup
           sleep 0.5
@@ -97,13 +112,13 @@ module Eluent
           return
         end
 
-        # Child: become session leader
+        # Intermediate: become session leader (detach from terminal)
         Process.setsid
 
-        # Fork again to prevent terminal acquisition
+        # Second fork: prevent terminal acquisition (only session leaders can acquire terminals)
         exit if fork
 
-        # Redirect standard streams
+        # Redirect standard streams to prevent unexpected I/O
         $stdin.reopen(File::NULL)
         $stdout.reopen(LOG_PATH, 'a')
         $stderr.reopen($stdout)
@@ -172,7 +187,8 @@ module Eluent
       def accept_connections
         while @running
           begin
-            # Use wait_readable with timeout to allow checking @running
+            # Use wait_readable with 1-second timeout instead of blocking accept.
+            # This allows the loop to periodically check @running for shutdown signals.
             next unless server_socket.wait_readable(1)
 
             client = server_socket.accept
@@ -222,25 +238,30 @@ module Eluent
         log 'Shutting down...'
         @running = false
 
-        # Close server socket
-        begin
-          server_socket&.close
-        rescue StandardError
-          nil
-        end
+        close_server_socket
+        wait_for_clients(timeout: 5)
+        force_close_clients
 
-        # Wait for clients with timeout
-        deadline = Time.now + 5
+        cleanup_files
+        log 'Shutdown complete'
+      end
+
+      def close_server_socket
+        server_socket&.close
+      rescue StandardError
+        nil
+      end
+
+      def wait_for_clients(timeout:)
+        deadline = Time.now + timeout
         sleep 0.1 until clients.empty? || Time.now > deadline
+      end
 
-        # Force close remaining clients
+      def force_close_clients
         mutex.synchronize do
           clients.each { |c| c.close rescue nil }
           clients.clear
         end
-
-        cleanup_files
-        log 'Shutdown complete'
       end
 
       def cleanup_files

@@ -84,14 +84,14 @@ RSpec.describe Eluent::Storage::Paths, :filesystem do
     end
   end
 
-  describe '#initialized?' do
+  describe '#data_file_exists?' do
     it 'returns false when data file does not exist' do
-      expect(paths).not_to be_initialized
+      expect(paths.data_file_exists?).to be false
     end
 
     it 'returns true when data file exists' do
       setup_eluent_directory(root_path)
-      expect(paths).to be_initialized
+      expect(paths.data_file_exists?).to be true
     end
   end
 

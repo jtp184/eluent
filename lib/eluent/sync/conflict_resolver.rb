@@ -10,7 +10,14 @@ module Eluent
       RESOLUTION_MERGE = :merge
       RESOLUTION_DELETE = :delete
 
-      # Resurrection rule: edit wins over delete
+      # Fallback timestamp for nil created_at/updated_at comparisons.
+      # Using epoch ensures deterministic ordering when timestamps are missing.
+      FALLBACK_TIME = Time.at(0).utc.freeze
+
+      # Resurrection rule: When one side deletes an item and the other edits it,
+      # the edit wins if it occurred after the base version. This prevents
+      # accidental data loss when edits and deletes happen concurrently.
+      #
       # Returns: :keep_local | :keep_remote | :merge | :delete
       def resolve_atom_conflict(base:, local:, remote:)
         local_discarded = local&.discard?
@@ -33,15 +40,14 @@ module Eluent
         RESOLUTION_MERGE
       end
 
-      # Comment deduplication using existing Comment#dedup_key
-      # Keeps earliest by created_at when duplicates found
-      # Keeps earliest by created_at when duplicates found
-      # Uses epoch as fallback for nil created_at for deterministic ordering
+      # Comment deduplication using existing Comment#dedup_key.
+      # Keeps earliest by created_at when duplicates found.
+      # Uses FALLBACK_TIME for nil created_at for deterministic ordering.
       def deduplicate_comments(comments)
         comments
           .group_by(&:dedup_key)
           .values
-          .map { |group| group.min_by { |c| c.created_at || Time.at(0).utc } }
+          .map { |group| group.min_by { |c| c.created_at || FALLBACK_TIME } }
       end
 
       # Bond deduplication by (source_id, target_id, dependency_type)
@@ -53,13 +59,13 @@ module Eluent
       private
 
       # Resurrection check: was the item edited after base?
-      # If edited has newer updated_at than base, resurrect
+      # If edited has newer updated_at than base, resurrect.
       def resurrection_check(base:, edited:)
         return true if base.nil? # New item on one side
         return true if edited.nil? # Shouldn't happen, but safe
 
-        base_time = base.updated_at || Time.at(0).utc
-        edited_time = edited.updated_at || Time.at(0).utc
+        base_time = base.updated_at || FALLBACK_TIME
+        edited_time = edited.updated_at || FALLBACK_TIME
 
         edited_time > base_time
       end

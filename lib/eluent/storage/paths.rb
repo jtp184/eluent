@@ -2,13 +2,13 @@
 
 module Eluent
   module Storage
-    # Manages all path resolution for a repository
-    # Single responsibility: knows where things live on disk
+    # Manages all path resolution for a repository.
+    # Single responsibility: knows where things live on disk.
     class Paths
       ELUENT_DIR = '.eluent'
-      DATA_FILE = 'data.jsonl'
-      EPHEMERAL_FILE = 'ephemeral.jsonl'
-      CONFIG_FILE = 'config.yaml'
+      DATA_FILE = 'data.jsonl' # Primary storage: atoms, bonds, comments (synced via git)
+      EPHEMERAL_FILE = 'ephemeral.jsonl' # Local-only data: scratchpad, drafts (gitignored)
+      CONFIG_FILE = 'config.yaml' # Repository configuration: defaults, custom statuses
 
       attr_reader :root
 
@@ -27,7 +27,7 @@ module Eluent
       def git_dir = File.join(root, '.git')
       def git_config_file = File.join(git_dir, 'config')
 
-      def initialized?
+      def data_file_exists?
         File.exist?(data_file)
       end
 

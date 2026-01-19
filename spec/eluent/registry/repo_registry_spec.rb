@@ -53,7 +53,7 @@ RSpec.describe Eluent::Registry::RepoRegistry, :filesystem do
       registry.register(name: 'test', path: '/new-path')
 
       expect(registry.all.size).to eq(1)
-      expect(registry.find('test').path).to eq('/new-path')
+      expect(registry.find_by_name('test').path).to eq('/new-path')
     end
 
     it 'replaces entry with same path' do
@@ -61,7 +61,7 @@ RSpec.describe Eluent::Registry::RepoRegistry, :filesystem do
       registry.register(name: 'new-name', path: '/project')
 
       expect(registry.all.size).to eq(1)
-      expect(registry.find('new-name').path).to eq('/project')
+      expect(registry.find_by_name('new-name').path).to eq('/project')
     end
   end
 
@@ -73,7 +73,7 @@ RSpec.describe Eluent::Registry::RepoRegistry, :filesystem do
     it 'removes the entry' do
       result = registry.unregister('test')
       expect(result.name).to eq('test')
-      expect(registry.find('test')).to be_nil
+      expect(registry.find_by_name('test')).to be_nil
     end
 
     it 'returns nil for unknown name' do
@@ -81,20 +81,20 @@ RSpec.describe Eluent::Registry::RepoRegistry, :filesystem do
     end
   end
 
-  describe '#find' do
+  describe '#find_by_name' do
     before do
       registry.register(name: 'project-a', path: '/projects/a')
       registry.register(name: 'project-b', path: '/projects/b')
     end
 
     it 'finds entry by name' do
-      entry = registry.find('project-a')
+      entry = registry.find_by_name('project-a')
       expect(entry.name).to eq('project-a')
       expect(entry.path).to eq('/projects/a')
     end
 
     it 'returns nil for unknown name' do
-      expect(registry.find('unknown')).to be_nil
+      expect(registry.find_by_name('unknown')).to be_nil
     end
   end
 
@@ -170,7 +170,7 @@ RSpec.describe Eluent::Registry::RepoRegistry, :filesystem do
       registry.register(name: 'test', path: '/test')
 
       new_registry = described_class.new(registry_path: registry_path)
-      expect(new_registry.find('test')).not_to be_nil
+      expect(new_registry.find_by_name('test')).not_to be_nil
     end
 
     it 'handles empty file' do

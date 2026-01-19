@@ -7,6 +7,11 @@ module Eluent
     # Coordinates the sync workflow
     # Single responsibility: orchestrate pull-first sync process
     class PullFirstOrchestrator
+      # Result of a sync operation.
+      # Status values:
+      #   :success    - Sync completed, changes were merged and/or pushed
+      #   :up_to_date - No changes needed, local and remote are in sync
+      #   :conflicted - Sync completed but unresolved conflicts remain
       SyncResult = Struct.new(:status, :changes, :conflicts, :commits, keyword_init: true) do
         def success? = status == :success
         def up_to_date? = status == :up_to_date
@@ -20,7 +25,15 @@ module Eluent
         @merge_engine = MergeEngine.new
       end
 
-      # Main entry point
+      # Main entry point for sync operations.
+      #
+      # @param pull_only [Boolean] Only pull remote changes, don't push local changes.
+      # @param push_only [Boolean] Only push local changes, skip pull/merge.
+      #   Note: pull_only and push_only are mutually exclusive. If both are false,
+      #   performs a full bidirectional sync (pull, merge, push).
+      # @param dry_run [Boolean] Compute what would change without writing to disk.
+      # @param force [Boolean] Bypass safety checks (e.g., in-progress items warning).
+      # @return [SyncResult] The outcome of the sync operation.
       def sync(pull_only: false, push_only: false, dry_run: false, force: false)
         validate_remote!
 
@@ -204,25 +217,27 @@ module Eluent
         )
       end
 
+      # Computes the diff between local state and merge result to report what changed.
+      # Uses set operations on atom IDs to categorize changes.
       def compute_changes(local_state, merge_result)
         changes = []
 
         local_ids = Set.new(local_state[:atoms].map(&:id))
         merged_ids = Set.new(merge_result.atoms.map(&:id))
 
-        # Added atoms
+        # Set difference: IDs in merged but not in local = atoms added from remote
         (merged_ids - local_ids).each do |id|
           atom = merge_result.atoms.find { |a| a.id == id }
           changes << { type: :added, record_type: :atom, id: id, title: atom&.title }
         end
 
-        # Removed atoms
+        # Set difference: IDs in local but not in merged = atoms removed (deleted remotely or via merge)
         (local_ids - merged_ids).each do |id|
           atom = local_state[:atoms].find { |a| a.id == id }
           changes << { type: :removed, record_type: :atom, id: id, title: atom&.title }
         end
 
-        # Modified atoms
+        # Set intersection: IDs in both = atoms that may have been modified
         (local_ids & merged_ids).each do |id|
           local = local_state[:atoms].find { |a| a.id == id }
           merged = merge_result.atoms.find { |a| a.id == id }

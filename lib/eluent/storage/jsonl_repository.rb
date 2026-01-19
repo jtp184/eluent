@@ -47,7 +47,7 @@ module Eluent
 
       # Load repository data
       def load!
-        raise RepositoryNotFoundError, paths.root unless paths.initialized?
+        raise RepositoryNotFoundError, paths.root unless paths.data_file_exists?
 
         self.config = config_loader.load
         load_data_files
@@ -56,7 +56,7 @@ module Eluent
         self
       end
 
-      def initialized? = paths.initialized?
+      def data_file_exists? = paths.data_file_exists?
       def loaded? = loaded
       def root_path = paths.root
 

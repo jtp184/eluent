@@ -234,13 +234,13 @@ module Eluent
       def repository
         @repository ||= begin
           repo = Storage::JsonlRepository.new(Dir.pwd)
-          repo.load! if repo.initialized?
+          repo.load! if repo.data_file_exists?
           repo
         end
       end
 
       def ensure_initialized!
-        return if repository.initialized?
+        return if repository.data_file_exists?
 
         raise Storage::RepositoryNotFoundError, Dir.pwd
       end
