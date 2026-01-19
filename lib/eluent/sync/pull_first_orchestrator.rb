@@ -244,7 +244,7 @@ module Eluent
       end
 
       def relative_data_path
-        '.eluent/data.jsonl'
+        File.join(Storage::Paths::ELUENT_DIR, Storage::Paths::DATA_FILE)
       end
     end
   end

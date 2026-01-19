@@ -53,11 +53,6 @@ module Eluent
         def action_start
           server = Eluent::Daemon::Server.new
           server.start(foreground: params[:foreground])
-
-          unless params[:foreground]
-            # Non-foreground mode already printed message
-          end
-
           0
         rescue Eluent::Daemon::AlreadyRunningError => e
           error('DAEMON_RUNNING', e.message)

@@ -62,6 +62,17 @@ RSpec.describe Eluent::Daemon::Protocol do
 
       expect { described_class.decode(io) }.to raise_error(Eluent::Daemon::ProtocolError, /Invalid JSON/)
     end
+
+    it 'raises error for incomplete message body' do
+      # Length prefix says 100 bytes, but only 10 provided
+      length = [100].pack('N')
+      partial_body = '{"cmd":"p"' # Only 10 bytes
+      io = StringIO.new(length + partial_body)
+
+      expect { described_class.decode(io) }.to raise_error(
+        Eluent::Daemon::ProtocolError, /Incomplete message body/
+      )
+    end
   end
 
   describe '.build_request' do

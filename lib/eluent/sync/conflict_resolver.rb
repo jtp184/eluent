@@ -15,7 +15,6 @@ module Eluent
       def resolve_atom_conflict(base:, local:, remote:)
         local_discarded = local&.discard?
         remote_discarded = remote&.discard?
-        base&.discard?
 
         # Both discarded - delete
         return RESOLUTION_DELETE if local_discarded && remote_discarded

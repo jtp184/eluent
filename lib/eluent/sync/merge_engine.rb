@@ -196,7 +196,7 @@ module Eluent
 
       def deep_merge_metadata(base:, local:, remote:)
         # Simple deep merge - remote wins on conflicts
-        merged = base.dup
+        merged = deep_dup_hash(base)
 
         local.each do |k, v|
           merged[k] = v
@@ -245,6 +245,12 @@ module Eluent
           val.to_a.sort
         else
           val
+        end
+      end
+
+      def deep_dup_hash(hash)
+        hash.transform_values do |v|
+          v.is_a?(Hash) ? deep_dup_hash(v) : v
         end
       end
     end
