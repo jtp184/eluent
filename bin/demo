@@ -5,6 +5,7 @@
 # Run from project root: bin/demo
 
 require 'fileutils'
+require 'json'
 
 # Setup paths
 PROJECT_ROOT = Pathname.new(__dir__).parent
@@ -140,31 +141,18 @@ step 'Show dependencies on the feature'
 el "show #{feature_id} -d"
 
 # ============================================================
-section '6. ADD COMMENTS'
+section '6. ADD COMMENTS (CLI)'
 # ============================================================
 
-# Comments are created via the repository directly in the current implementation
-# Let's use Ruby API to add comments
-step 'Adding comments via Ruby API'
+step 'Add comments to the bug report'
+el "comment add #{bug_id} 'I can reproduce this on iOS 17.2' --author developer"
+el "comment add #{bug_id} 'Also affects iPad Safari' --author qa-team"
+el "comment add #{bug_id} 'Root cause: CSS touch-action property missing' --author developer"
 
-require_relative '../lib/eluent'
+step 'List comments on the bug'
+el "comment list #{bug_id}"
 
-repo = Eluent::Storage::JsonlRepository.new(DEMO_DIR)
-repo.load!
-
-# Find the bug atom
-bug_atom = repo.find_atom(bug_id)
-if bug_atom
-  repo.create_comment(parent_id: bug_atom.id, author: 'developer', content: 'I can reproduce this on iOS 17.2')
-  repo.create_comment(parent_id: bug_atom.id, author: 'qa-team', content: 'Also affects iPad Safari')
-  repo.create_comment(parent_id: bug_atom.id, author: 'developer',
-                      content: 'Root cause: CSS touch-action property missing')
-  puts "\e[32mAdded 3 comments to bug #{bug_id}\e[0m"
-else
-  puts "\e[31mBug #{bug_id} not found!\e[0m"
-end
-
-step 'Show bug with comments'
+step 'Show bug with comments (alternative view)'
 el "show #{bug_id} -c"
 
 # ============================================================
@@ -250,6 +238,98 @@ el 'list --robot'
 
 step 'Show in robot mode'
 el "show #{feature_id} --robot"
+
+# ============================================================
+section '12. DEPENDENCY MANAGEMENT'
+# ============================================================
+
+step 'Add dependency: task1 must complete before task2'
+el "dep add #{task1_id} #{task2_id}"
+
+step 'Add dependency: task2 must complete before task3'
+el "dep add #{task2_id} #{task3_id}"
+
+step 'List dependencies for task2 (shows incoming and outgoing)'
+el "dep list #{task2_id}"
+
+step 'Show dependency tree from task1'
+el "dep tree #{task1_id}"
+
+step 'Show blocking-only dependency tree'
+el "dep tree #{task1_id} -b"
+
+step 'Run dependency health check'
+el 'dep check'
+
+step 'Try to create a cycle (should fail)'
+el "dep add #{task3_id} #{task1_id}"
+
+step 'Remove a dependency'
+el "dep remove #{task2_id} #{task3_id}"
+
+step 'Verify dependency removed'
+el "dep list #{task2_id}"
+
+# ============================================================
+section '13. READY QUEUE (Actionable Items)'
+# ============================================================
+
+step 'Show items ready for work (unblocked, not deferred)'
+el 'ready'
+
+step 'Show ready items sorted by oldest first (prevents starvation)'
+el 'ready --sort oldest'
+
+step 'Show ready items with hybrid sorting (balances priority and age)'
+el 'ready --sort hybrid'
+
+step 'Show ready bugs only'
+el 'ready --type bug'
+
+step 'Show ready items assigned to alice'
+el 'ready --assignee alice'
+
+step 'Show ready items with backend label'
+el 'ready -l backend'
+
+step 'Show ready items excluding epics'
+el 'ready --exclude epic'
+
+step 'Ready queue in robot mode'
+el 'ready --robot'
+
+# ============================================================
+section '14. SOFT DELETE (Discard/Restore)'
+# ============================================================
+
+step 'Create a task we will discard'
+output = el "create -t 'Temporary investigation task' --type task", capture: true
+temp_id = output[/Created \w+ (\w+):/, 1]
+puts "  -> temp ID: #{temp_id}"
+
+step 'Discard the temporary task (soft delete)'
+el "discard #{temp_id}"
+
+step 'List discarded items'
+el 'discard list'
+
+step 'Show the discarded item (still accessible)'
+el "show #{temp_id}"
+
+step 'Restore the discarded item'
+el "discard restore #{temp_id}"
+
+step 'Discarded list should be empty now'
+el 'discard list'
+
+step 'Item is back in regular list'
+el "show #{temp_id}"
+
+step 'Discard it again for prune demo'
+el "discard #{temp_id}"
+
+step 'Prune discarded items (permanently delete)'
+el 'discard prune --days 0 --force'
 
 # ============================================================
 section 'SUMMARY'

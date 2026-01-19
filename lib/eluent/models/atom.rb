@@ -69,6 +69,10 @@ module Eluent
         defer_until < Time.now.utc if defer_until
       end
 
+      def defer_future?
+        deferred? && defer_until && defer_until > Time.now.utc
+      end
+
       def to_h
         {
           _type: 'atom',

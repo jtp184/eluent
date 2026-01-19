@@ -976,7 +976,7 @@ end
 22. **Minimum 4 characters for lookup**: Reject 1-3 char prefixes
 23. **Disambiguation prompt in interactive mode**: Multiple matches → user selection
 24. **Structured AMBIGUOUS_ID error in robot mode**: JSON error with candidates
-25. **Confusable character normalization**: I→1, L→1, O→0 input handling
+25. **Confusable character normalization**: I,L→1, O→0 input handling
 26. **Timestamp ordering**: Newer ULIDs sort lexicographically higher
 27. **Full ID lookup bypasses prefix matching**: 26-char input → direct exact lookup
 
@@ -1035,7 +1035,7 @@ end
 - Edge case: Clock skew between machines → use UTC everywhere
 
 **Abstract Type List**
-- Types excluded from `el ready` by default: `epic`, `molecule`, `formula`
+- Types excluded from `el ready` by default: `epic`, `formula`
 - Custom abstract types registered via plugin: `abstract: true` flag
 - `el ready --include-abstract` overrides for debugging
 
@@ -1147,7 +1147,7 @@ end
 
 **ID Shortening Edge Cases**
 - **Minimum prefix validation**: Reject < 4 character randomness prefixes
-- **Confusable normalization**: Handle I,L,O,U → 1,1,0,V (per Crockford spec)
+- **Confusable normalization**: Handle I,L → 1 and O → 0 (per Crockford spec)
 - **Invalid ULID characters**: Graceful error with valid character hint
 - **ULID range validation**: First character must be 0-7
 - **Timestamp vs randomness parsing**: Correctly split 26-char ULID into 10+16
@@ -1249,8 +1249,8 @@ el sync
 
 ## Implementation Order
 
-1. **Foundation** - Models, Storage, basic CLI (init/create/list/show)
-2. **Graph** - Dependencies, blocking, ready work
+1. **Foundation** - Models, Storage, basic CLI (init/create/list/show/update/close/reopen/config)
+2. **Graph** - Dependencies, blocking, ready work (ready/dep/comment/discard commands)
 3. **Sync/Daemon** - Git sync, Unix socket daemon
 4. **Formulas** - Templates and compaction
 5. **Extensions** - Plugins and AI integration

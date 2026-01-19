@@ -150,6 +150,32 @@ RSpec.describe Eluent::Models::Atom do
     end
   end
 
+  describe '#defer_future?' do
+    it 'returns false when status is not deferred' do
+      atom = build(:atom, status: :open, defer_until: Time.now.utc + 3600)
+      expect(atom.defer_future?).to be false
+    end
+
+    it 'returns falsey when defer_until is nil' do
+      atom = build(:atom, status: :deferred, defer_until: nil)
+      expect(atom).not_to be_defer_future
+    end
+
+    it 'returns false when defer_until is in the past' do
+      Timecop.freeze(Time.utc(2025, 6, 15, 12, 0, 0)) do
+        atom = build(:atom, status: :deferred, defer_until: Time.utc(2025, 6, 14, 12, 0, 0))
+        expect(atom.defer_future?).to be false
+      end
+    end
+
+    it 'returns true when deferred and defer_until is in the future' do
+      Timecop.freeze(Time.utc(2025, 6, 15, 12, 0, 0)) do
+        atom = build(:atom, status: :deferred, defer_until: Time.utc(2025, 6, 16, 12, 0, 0))
+        expect(atom.defer_future?).to be true
+      end
+    end
+  end
+
   describe '#to_h' do
     subject(:hash) { atom.to_h }
 
