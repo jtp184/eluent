@@ -152,6 +152,8 @@ module Eluent
         @pattern = pattern ? Regexp.new(pattern) : nil
       end
 
+      # A variable is only truly required if marked required AND has no default.
+      # Variables with defaults are effectively optional since the default fills in.
       def required?
         !!required && default.nil?
       end

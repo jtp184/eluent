@@ -38,7 +38,7 @@ module Eluent
       attr_reader :repository
 
       def find_children(parent_id)
-        repository.all_atoms.select { |a| a.parent_id == parent_id }
+        repository.indexer.children_of(parent_id)
       end
 
       def build_dependency_graph(root_id, children)

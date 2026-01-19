@@ -47,7 +47,7 @@ module Eluent
         return false unless atom
         return false unless compacted?(atom)
 
-        find_historical_version(atom).present?
+        !find_historical_version(atom).nil?
       rescue StandardError
         false
       end

@@ -114,7 +114,7 @@ module Eluent
 
         if comments.size >= 2
           last = comments.max_by(&:created_at)
-          highlights << truncate_highlight("#{last.author}: #{last.content}") if last != comments.first
+          highlights << truncate_highlight("#{last.author}: #{last.content}")
         end
 
         # Look for key phrases in middle comments
