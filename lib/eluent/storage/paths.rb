@@ -23,6 +23,7 @@ module Eluent
       def formulas_dir = File.join(eluent_dir, 'formulas')
       def plugins_dir = File.join(eluent_dir, 'plugins')
       def gitignore_file = File.join(eluent_dir, '.gitignore')
+      def sync_state_file = File.join(eluent_dir, '.sync-state')
       def git_dir = File.join(root, '.git')
       def git_config_file = File.join(git_dir, 'config')
 

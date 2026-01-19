@@ -65,6 +65,12 @@ RSpec.describe Eluent::Storage::Paths, :filesystem do
       end
     end
 
+    describe '#sync_state_file' do
+      it 'returns the .sync-state file path' do
+        expect(paths.sync_state_file).to eq('/project/.eluent/.sync-state')
+      end
+    end
+
     describe '#git_dir' do
       it 'returns the .git directory path' do
         expect(paths.git_dir).to eq('/project/.git')

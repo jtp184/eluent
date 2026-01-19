@@ -10,7 +10,7 @@ module Eluent
     class Application
       include TTY::Option
 
-      COMMANDS = %w[init create list show update close reopen config ready dep comment discard].freeze
+      COMMANDS = %w[init create list show update close reopen config ready dep comment discard sync daemon].freeze
 
       ERROR_CODES = {
         Storage::RepositoryNotFoundError => 'REPO_NOT_FOUND',
@@ -20,13 +20,23 @@ module Eluent
         Models::ValidationError => 'VALIDATION_ERROR',
         Models::SelfReferenceError => 'SELF_REFERENCE',
         Graph::CycleDetectedError => 'CYCLE_DETECTED',
-        Models::InvalidTransitionError => 'INVALID_TRANSITION'
+        Models::InvalidTransitionError => 'INVALID_TRANSITION',
+        Sync::GitError => 'GIT_ERROR',
+        Sync::NoRemoteError => 'NO_REMOTE',
+        Daemon::AlreadyRunningError => 'DAEMON_RUNNING',
+        Daemon::NotRunningError => 'DAEMON_NOT_RUNNING',
+        Daemon::ProtocolError => 'PROTOCOL_ERROR',
+        Daemon::ConnectionError => 'CONNECTION_ERROR',
+        Daemon::TimeoutError => 'TIMEOUT'
       }.freeze
 
       EXIT_CODES = {
         'REPO_NOT_FOUND' => 3, 'NOT_FOUND' => 3,
         'REPO_EXISTS' => 4, 'AMBIGUOUS_ID' => 4, 'SELF_REFERENCE' => 4, 'CYCLE_DETECTED' => 4,
-        'VALIDATION_ERROR' => 2, 'INVALID_TRANSITION' => 2
+        'VALIDATION_ERROR' => 2, 'INVALID_TRANSITION' => 2,
+        'GIT_ERROR' => 5, 'NO_REMOTE' => 5,
+        'DAEMON_RUNNING' => 6, 'DAEMON_NOT_RUNNING' => 6, 'PROTOCOL_ERROR' => 6,
+        'CONNECTION_ERROR' => 7, 'TIMEOUT' => 7
       }.freeze
 
       usage do
