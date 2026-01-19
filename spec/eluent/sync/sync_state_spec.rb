@@ -51,11 +51,11 @@ RSpec.describe Eluent::Sync::SyncState, :filesystem do
 
       before do
         File.write(paths.sync_state_file, JSON.generate(
-          last_sync_at: sync_time.iso8601,
-          base_commit: 'abc123',
-          local_head: 'def456',
-          remote_head: 'ghi789'
-        ))
+                                            last_sync_at: sync_time.iso8601,
+                                            base_commit: 'abc123',
+                                            local_head: 'def456',
+                                            remote_head: 'ghi789'
+                                          ))
       end
 
       it 'loads the sync state' do

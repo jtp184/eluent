@@ -38,13 +38,13 @@ module Eluent
         )
 
         merged_bonds = merge_bonds(
-          base_bonds: base[:bonds] || [],
+          _base_bonds: base[:bonds] || [],
           local_bonds: local[:bonds] || [],
           remote_bonds: remote[:bonds] || []
         )
 
         merged_comments = merge_comments(
-          base_comments: base[:comments] || [],
+          _base_comments: base[:comments] || [],
           local_comments: local[:comments] || [],
           remote_comments: remote[:comments] || []
         )
@@ -239,16 +239,16 @@ module Eluent
         merged
       end
 
-      def merge_bonds(base_bonds:, local_bonds:, remote_bonds:)
+      def merge_bonds(_base_bonds:, local_bonds:, remote_bonds:)
         # Union of all bonds, deduplicated by key
-        # base_bonds reserved for future diff-based merge
+        # _base_bonds reserved for future diff-based merge
         all_bonds = local_bonds + remote_bonds
         conflict_resolver.deduplicate_bonds(all_bonds)
       end
 
-      def merge_comments(base_comments:, local_comments:, remote_comments:)
+      def merge_comments(_base_comments:, local_comments:, remote_comments:)
         # Union of all comments, deduplicated by dedup_key
-        # base_comments reserved for future diff-based merge
+        # _base_comments reserved for future diff-based merge
         all_comments = local_comments + remote_comments
         conflict_resolver.deduplicate_comments(all_comments)
       end

@@ -98,14 +98,10 @@ module Eluent
 
         while buffer.bytesize < bytes_needed
           remaining_time = deadline - Time.now
-          if remaining_time <= 0
-            raise ReadTimeoutError, "Read timeout after #{timeout}s"
-          end
+          raise ReadTimeoutError, "Read timeout after #{timeout}s" if remaining_time <= 0
 
           # Wait for data with timeout
-          unless IO.select([io], nil, nil, remaining_time)
-            raise ReadTimeoutError, "Read timeout after #{timeout}s"
-          end
+          raise ReadTimeoutError, "Read timeout after #{timeout}s" unless io.wait_readable(remaining_time)
 
           remaining = bytes_needed - buffer.bytesize
           chunk = io.read_nonblock(remaining, exception: false)
@@ -163,9 +159,7 @@ module Eluent
         }
       end
 
-      def generate_id
-        "req-#{SecureRandom.hex(4)}"
-      end
+      def generate_id = "req-#{SecureRandom.hex(4)}"
     end
 
     class ProtocolError < Error; end

@@ -48,26 +48,24 @@ RSpec.describe Eluent::Daemon::CommandRouter do
   end
 
   describe 'repository caching' do
+    def setup_fake_repo(path)
+      FileUtils.mkdir_p("#{path}/.eluent")
+      File.write("#{path}/.eluent/data.jsonl", "{\"_type\":\"header\",\"repo_name\":\"test\"}\n")
+      File.write("#{path}/.eluent/config.yaml", "repo_name: test\n")
+      FileUtils.mkdir_p("#{path}/.git")
+    end
+
     it 'caches repositories by path', :filesystem do
       FakeFS.activate!
       FakeFS::FileSystem.clear
 
       begin
-        # Set up a repository
-        FileUtils.mkdir_p('/project/.eluent')
-        File.write('/project/.eluent/data.jsonl', "{\"_type\":\"header\",\"repo_name\":\"test\"}\n")
-        File.write('/project/.eluent/config.yaml', "repo_name: test\n")
-        FileUtils.mkdir_p('/project/.git')
+        setup_fake_repo('/project')
 
-        request1 = { id: 'req-1', cmd: 'list', args: { repo_path: '/project' } }
-        request2 = { id: 'req-2', cmd: 'list', args: { repo_path: '/project' } }
+        router.route({ id: 'req-1', cmd: 'list', args: { repo_path: '/project' } })
+        router.route({ id: 'req-2', cmd: 'list', args: { repo_path: '/project' } })
 
-        router.route(request1)
-        router.route(request2)
-
-        # Should use same cached repository instance
-        repo_cache = router.send(:repo_cache)
-        expect(repo_cache.keys).to eq(['/project'])
+        expect(router.send(:repo_cache).keys).to eq(['/project'])
       ensure
         FakeFS.deactivate!
       end

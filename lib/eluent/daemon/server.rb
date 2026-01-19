@@ -205,9 +205,23 @@ module Eluent
 
       def handle_connection(socket)
         mutex.synchronize { clients << socket }
-        connection_timeout = config.fetch(:connection_timeout, DEFAULT_CONNECTION_TIMEOUT)
-        deadline = Time.now + connection_timeout
+        deadline = Time.now + config.fetch(:connection_timeout, DEFAULT_CONNECTION_TIMEOUT)
 
+        process_requests(socket, deadline)
+      rescue IOError, Errno::ECONNRESET, Errno::EPIPE
+        # Client disconnected
+      rescue ReadTimeoutError
+        log 'Read timeout: closing connection'
+      rescue ProtocolError => e
+        log "Protocol error: #{e.message}"
+        send_error_response(socket, e)
+      rescue StandardError => e
+        log "Connection error: #{e.message}"
+      ensure
+        cleanup_connection(socket)
+      end
+
+      def process_requests(socket, deadline)
         loop do
           remaining_time = deadline - Time.now
           if remaining_time <= 0
@@ -222,27 +236,20 @@ module Eluent
           response = router.route(request)
           socket.write(Protocol.encode(response))
         end
-      rescue IOError, Errno::ECONNRESET, Errno::EPIPE
-        # Client disconnected
-      rescue ReadTimeoutError
-        log 'Read timeout: closing connection'
-      rescue ProtocolError => e
-        log "Protocol error: #{e.message}"
-        begin
-          error_response = Protocol.build_error(id: nil, code: 'PROTOCOL_ERROR', message: e.message)
-          socket.write(Protocol.encode(error_response))
-        rescue StandardError
-          # Ignore errors sending error response
-        end
-      rescue StandardError => e
-        log "Connection error: #{e.message}"
-      ensure
+      end
+
+      def send_error_response(socket, error)
+        error_response = Protocol.build_error(id: nil, code: 'PROTOCOL_ERROR', message: error.message)
+        socket.write(Protocol.encode(error_response))
+      rescue StandardError
+        # Ignore errors sending error response
+      end
+
+      def cleanup_connection(socket)
         mutex.synchronize { clients.delete(socket) }
-        begin
-          socket.close
-        rescue StandardError
-          nil
-        end
+        socket.close
+      rescue StandardError
+        nil
       end
 
       def graceful_shutdown

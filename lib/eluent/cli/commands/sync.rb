@@ -72,7 +72,7 @@ module Eluent
         end
 
         def ensure_remote!
-          return true if git_adapter.has_remote?
+          return true if git_adapter.remote?
 
           error('NO_REMOTE', 'No git remote configured. Add a remote with: git remote add origin <url>')
         end

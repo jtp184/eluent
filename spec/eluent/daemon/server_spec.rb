@@ -59,8 +59,7 @@ RSpec.describe Eluent::Daemon::Server do
   describe '#start' do
     context 'when already running' do
       before do
-        allow(server).to receive(:running?).and_return(true)
-        allow(server).to receive(:read_pid).and_return(12345)
+        allow(server).to receive_messages(running?: true, read_pid: 12_345)
       end
 
       it 'raises AlreadyRunningError' do

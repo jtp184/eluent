@@ -33,7 +33,7 @@ module Eluent
         nil
       end
 
-      def has_remote?(remote: 'origin')
+      def remote?(remote: 'origin')
         run_git('remote', 'get-url', remote, allow_failure: true)
         true
       rescue GitError

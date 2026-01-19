@@ -92,30 +92,12 @@ module Eluent
         backup_path = "#{data_path.chomp('/')}.backup"
         local_state = load_current_state
 
-        # Backup data file before modification
         FileUtils.cp(data_path, backup_path) if File.exist?(data_path)
 
         begin
           apply_merge_result(merge_result)
-
-          # Push if not pull_only (before saving sync state - if push fails, state should not update)
-          commits = []
-          unless pull_only
-            unless git_adapter.clean?
-              commit_hash = commit_changes(force: force)
-              commits << commit_hash if commit_hash
-              git_adapter.push
-            end
-          end
-
-          # Update sync state only after successful push
-          new_local_head = git_adapter.current_commit
-          sync_state.update(
-            last_sync_at: Time.now.utc,
-            base_commit: remote_head,
-            local_head: new_local_head,
-            remote_head: remote_head
-          ).save
+          commits = push_if_needed(pull_only: pull_only, force: force)
+          update_sync_state(remote_head)
 
           SyncResult.new(
             status: merge_result.conflicts.any? ? :conflicted : :success,
@@ -123,13 +105,29 @@ module Eluent
             conflicts: merge_result.conflicts,
             commits: commits
           )
-        rescue StandardError => e
-          # Restore from backup on failure
+        rescue StandardError
           FileUtils.mv(backup_path, data_path) if File.exist?(backup_path)
           raise
         ensure
           FileUtils.rm_f(backup_path)
         end
+      end
+
+      def push_if_needed(pull_only:, force:)
+        return [] if pull_only || git_adapter.clean?
+
+        commit_hash = commit_changes(force: force)
+        git_adapter.push
+        commit_hash ? [commit_hash] : []
+      end
+
+      def update_sync_state(remote_head)
+        sync_state.update(
+          last_sync_at: Time.now.utc,
+          base_commit: remote_head,
+          local_head: git_adapter.current_commit,
+          remote_head: remote_head
+        ).save
       end
 
       def with_sync_lock
@@ -148,7 +146,7 @@ module Eluent
       attr_reader :repository, :git_adapter, :sync_state, :merge_engine
 
       def validate_remote!
-        raise NoRemoteError unless git_adapter.has_remote?
+        raise NoRemoteError unless git_adapter.remote?
       end
 
       def find_merge_base(commit1, commit2)
@@ -203,9 +201,7 @@ module Eluent
           warn "el: warning: skipping malformed JSON line during sync: #{e.message}"
         end
 
-        if skipped_count.positive?
-          warn "el: WARNING: #{skipped_count} record(s) skipped due to data corruption"
-        end
+        warn "el: WARNING: #{skipped_count} record(s) skipped due to data corruption" if skipped_count.positive?
 
         { atoms: atoms.compact, bonds: bonds.compact, comments: comments.compact, skipped: skipped_count }
       end
