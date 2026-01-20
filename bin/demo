@@ -6,6 +6,7 @@
 
 require 'fileutils'
 require 'json'
+require 'securerandom'
 
 # Setup paths
 PROJECT_ROOT = Pathname.new(__dir__).parent
@@ -330,6 +331,212 @@ el "discard #{temp_id}"
 
 step 'Prune discarded items (permanently delete)'
 el 'discard prune --days 0 --force'
+
+# ============================================================
+section '15. FORMULAS (Reusable Work Templates)'
+# ============================================================
+
+step 'Create formula directory and sample formulas'
+formulas_dir = DEMO_DIR / '.eluent' / 'formulas'
+FileUtils.mkdir_p(formulas_dir)
+
+# Create a sprint planning formula
+File.write(formulas_dir / 'sprint-planning.yaml', <<~YAML)
+  id: sprint-planning
+  title: Sprint Planning for {{feature}}
+  description: Standard sprint workflow for implementing a feature
+  variables:
+    feature:
+      description: Name of the feature
+      required: true
+    assignee:
+      description: Primary developer
+      default: unassigned
+    sprint:
+      description: Sprint identifier
+      default: current
+  steps:
+    - id: design
+      title: Design {{feature}}
+      issue_type: task
+      labels:
+        - design
+        - sprint-{{sprint}}
+    - id: implement
+      title: Implement {{feature}}
+      issue_type: task
+      assignee: "{{assignee}}"
+      depends_on:
+        - design
+      labels:
+        - backend
+        - sprint-{{sprint}}
+    - id: test
+      title: Test {{feature}}
+      issue_type: task
+      depends_on:
+        - implement
+      labels:
+        - testing
+        - sprint-{{sprint}}
+    - id: review
+      title: Code review for {{feature}}
+      issue_type: task
+      depends_on:
+        - implement
+      labels:
+        - review
+        - sprint-{{sprint}}
+YAML
+
+# Create a bug fix formula
+File.write(formulas_dir / 'bug-fix.yaml', <<~YAML)
+  id: bug-fix
+  title: Bug Fix Workflow
+  description: Standard bug investigation and fix process
+  variables:
+    bug_title:
+      description: Brief bug description
+      required: true
+    severity:
+      description: Bug severity level
+      enum:
+        - low
+        - medium
+        - high
+        - critical
+      default: medium
+  steps:
+    - id: investigate
+      title: Investigate {{bug_title}}
+      issue_type: task
+      priority: 1
+      labels:
+        - investigation
+    - id: fix
+      title: Fix {{bug_title}}
+      issue_type: task
+      depends_on:
+        - investigate
+      labels:
+        - fix
+        - severity-{{severity}}
+    - id: verify
+      title: Verify fix for {{bug_title}}
+      issue_type: task
+      depends_on:
+        - fix
+      labels:
+        - verification
+YAML
+
+step 'List available formulas'
+el 'formula list'
+
+step 'Show sprint-planning formula details'
+el 'formula show sprint-planning'
+
+step 'Instantiate sprint-planning formula with variables'
+output = el "formula instantiate sprint-planning --var feature=OAuth --var assignee=bob --var sprint=Q1",
+            capture: true
+# Capture the epic ID from the output for later use in distill
+oauth_epic_id = output[/root_atom_id['":\s]+([^'",\s}]+)/, 1] ||
+                output[/Created (\d+) items/, 1] && 'OAuth' # fallback
+puts '  -> Created items from template'
+
+step 'List items to see the created hierarchy'
+el 'list'
+
+step 'Instantiate bug-fix formula for a security issue'
+el "formula instantiate bug-fix --var bug_title='XSS vulnerability' --var severity=critical",
+   capture: true
+
+step 'Distill a formula from the OAuth epic (has child items from instantiation)'
+# Use robot mode to get the epic ID, then distill from it
+oauth_list = el 'list --type epic --robot', capture: true, show_output: false
+begin
+  oauth_data = JSON.parse(oauth_list)
+  # Robot mode uses 'items' key for the list
+  oauth_epic = oauth_data.dig('data', 'items')&.find { |a| a['title']&.include?('Sprint Planning for OAuth') }
+  if oauth_epic
+    # Use the full ID - the CLI can resolve it
+    full_id = oauth_epic['id']
+    puts "  -> Found OAuth epic: #{full_id.split('-').last[0, 8]}..."
+    el "formula distill #{full_id} --id oauth-workflow --extract 'OAuth=feature_name'"
+  else
+    puts '  -> Could not find OAuth epic in list'
+  end
+rescue JSON::ParserError => e
+  puts "  -> JSON parse error: #{e.message[0, 50]}"
+end
+
+step 'List formulas to see the newly distilled formula'
+el 'formula list'
+
+step 'Show the distilled formula'
+el 'formula show oauth-workflow'
+
+step 'Compose formulas: combine bug-fix and sprint-planning sequentially'
+el 'formula compose bug-fix sprint-planning --id full-cycle --type sequential --title "Full Development Cycle"',
+   capture: true
+
+step 'Show the composed formula'
+el 'formula show full-cycle'
+
+step 'Attach a formula to an existing epic'
+el "formula attach bug-fix #{epic_id} --var bug_title='Performance regression' --var severity=high",
+   capture: true
+
+step 'Show epic with attached formula items'
+el "show #{epic_id} -d"
+
+step 'Formula commands in robot mode'
+el 'formula list --robot'
+
+# ============================================================
+section '16. COMPACTION (Archive Old Items)'
+# ============================================================
+
+step 'Create an old closed item for compaction demo'
+# Create a new task and close it, then backdate it
+output = el "create -t 'Legacy cleanup task' -d 'This was an old task with a #{'detailed ' * 50}description that should be compacted.' --type task",
+            capture: true
+old_task_id = output[/Created \w+ (\w+):/, 1]
+puts "  -> Created task: #{old_task_id}"
+
+# Close the task
+el "close #{old_task_id} -r 'Completed long ago'"
+
+# Now backdate the closed task in the data file
+old_time = (Time.now - (45 * 24 * 60 * 60)).utc.iso8601
+data_file = DEMO_DIR / '.eluent' / 'data.jsonl'
+content = File.read(data_file)
+lines = content.lines.map do |line|
+  data = JSON.parse(line, symbolize_names: true) rescue nil
+  if data && data[:_type] == 'atom' && data[:title] == 'Legacy cleanup task'
+    # Backdate the closed task to simulate an old item
+    data[:closed_at] = old_time
+    data[:updated_at] = old_time
+    data[:created_at] = old_time
+    JSON.generate(data) + "\n"
+  else
+    line
+  end
+end
+File.write(data_file, lines.join)
+puts "  -> Backdated closed task to 45 days ago"
+
+step 'Preview tier 1 compaction (items > 30 days old)'
+el 'compact run --tier 1 --preview'
+
+step 'Run tier 1 compaction'
+el 'compact run --tier 1'
+
+step 'Preview tier 2 compaction (items > 90 days old)'
+el 'compact run --tier 2 --preview'
+
+step 'Show compaction help'
+el 'compact --help'
 
 # ============================================================
 section 'SUMMARY'

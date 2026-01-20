@@ -180,7 +180,7 @@ module Eluent
           formula_id = params[:target]
           return error('MISSING_ID', 'Formula ID required') unless formula_id
 
-          target_id = params[:extra_args]&.first
+          target_id = Array(params[:extra_args]).first
           return error('MISSING_ID', 'Target atom ID required: el formula attach FORMULA_ID TARGET_ID') unless target_id
 
           formula = parser.parse(formula_id)
