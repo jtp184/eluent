@@ -27,8 +27,6 @@ module Eluent
 
           parsed = parse_json(content)
           parsed.is_a?(Hash) && parsed.key?('closed')
-        rescue JSON::ParserError
-          false
         end
       end
     end

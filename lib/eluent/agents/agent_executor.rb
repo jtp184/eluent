@@ -114,6 +114,7 @@ module Eluent
 
       VALID_PRIORITY_RANGE = (0..4)
       ALLOWED_UPDATE_FIELDS = %i[status priority title description assignee labels].freeze
+      TOOL_NAME_PATTERN = /\A[a-z][a-z0-9_]*\z/
 
       def tool_create_item(title:, description: nil, type: 'task', priority: 2, assignee: nil, labels: nil)
         return { error: 'Title is required' } if title.nil? || title.to_s.strip.empty?
@@ -166,6 +167,7 @@ module Eluent
       end
 
       MAX_LIST_LIMIT = 50
+      VALID_DEPENDENCY_TYPES = %w[blocks related waits_for parent_child].freeze
 
       def tool_list_ready_items(sort: 'priority', type: nil, assignee: nil, limit: 10)
         # Enforce documented maximum limit
@@ -188,6 +190,11 @@ module Eluent
       end
 
       def tool_add_dependency(source_id:, target_id:, dependency_type: 'blocks')
+        unless VALID_DEPENDENCY_TYPES.include?(dependency_type)
+          return { error: "Invalid dependency type: #{dependency_type}. " \
+                          "Valid types: #{VALID_DEPENDENCY_TYPES.join(', ')}" }
+        end
+
         source = repository.find_atom(source_id)
         return { error: "Source item not found: #{source_id}" } unless source
 
@@ -235,7 +242,7 @@ module Eluent
       end
 
       def valid_tool_name?(tool_name)
-        tool_name.is_a?(String) && !tool_name.strip.empty?
+        tool_name.is_a?(String) && TOOL_NAME_PATTERN.match?(tool_name)
       end
 
       def default_system_prompt(atom)

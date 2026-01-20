@@ -154,6 +154,70 @@ RSpec.describe Eluent::Agents::AgentExecutor do
       end
     end
 
+    describe 'tool_add_dependency' do
+      let(:source_atom) { Eluent::Models::Atom.new(id: 'atom-1', title: 'Source') }
+      let(:target_atom) { Eluent::Models::Atom.new(id: 'atom-2', title: 'Target') }
+      let(:bond) { Eluent::Models::Bond.new(source_id: 'atom-1', target_id: 'atom-2', dependency_type: 'blocks') }
+
+      before do
+        allow(repository).to receive(:find_atom).with('atom-1').and_return(source_atom)
+        allow(repository).to receive(:find_atom).with('atom-2').and_return(target_atom)
+        allow(repository).to receive(:create_bond).and_return(bond)
+      end
+
+      it 'creates a dependency with valid type' do
+        args = { source_id: 'atom-1', target_id: 'atom-2', dependency_type: 'blocks' }
+        result = executor.execute_tool('add_dependency', args)
+
+        expect(result[:created][:type].to_s).to eq('blocks')
+      end
+
+      it 'accepts related dependency type' do
+        allow(repository).to receive(:create_bond).and_return(
+          Eluent::Models::Bond.new(source_id: 'atom-1', target_id: 'atom-2', dependency_type: 'related')
+        )
+        args = { source_id: 'atom-1', target_id: 'atom-2', dependency_type: 'related' }
+        result = executor.execute_tool('add_dependency', args)
+
+        expect(result[:created][:type].to_s).to eq('related')
+      end
+
+      it 'accepts waits_for dependency type' do
+        allow(repository).to receive(:create_bond).and_return(
+          Eluent::Models::Bond.new(source_id: 'atom-1', target_id: 'atom-2', dependency_type: 'waits_for')
+        )
+        args = { source_id: 'atom-1', target_id: 'atom-2', dependency_type: 'waits_for' }
+        result = executor.execute_tool('add_dependency', args)
+
+        expect(result[:created][:type].to_s).to eq('waits_for')
+      end
+
+      it 'returns error for invalid dependency type' do
+        args = { source_id: 'atom-1', target_id: 'atom-2', dependency_type: 'invalid_type' }
+        result = executor.execute_tool('add_dependency', args)
+
+        expect(result[:error]).to include('Invalid dependency type')
+        expect(result[:error]).to include('blocks, related')
+      end
+
+      it 'returns error for source not found' do
+        allow(repository).to receive(:find_atom).with('unknown').and_return(nil)
+
+        result = executor.execute_tool('add_dependency', { source_id: 'unknown', target_id: 'atom-2' })
+
+        expect(result[:error]).to include('Source item not found')
+      end
+
+      it 'returns error for target not found' do
+        allow(repository).to receive(:find_atom).with('atom-1').and_return(source_atom)
+        allow(repository).to receive(:find_atom).with('unknown').and_return(nil)
+
+        result = executor.execute_tool('add_dependency', { source_id: 'atom-1', target_id: 'unknown' })
+
+        expect(result[:error]).to include('Target item not found')
+      end
+    end
+
     describe 'unknown tool' do
       it 'returns error' do
         result = executor.execute_tool('unknown_tool', {})
@@ -177,6 +241,24 @@ RSpec.describe Eluent::Agents::AgentExecutor do
 
       it 'returns error for whitespace-only tool_name' do
         result = executor.execute_tool('   ', {})
+
+        expect(result[:error]).to include('non-empty string')
+      end
+
+      it 'returns error for tool_name starting with number' do
+        result = executor.execute_tool('123_tool', {})
+
+        expect(result[:error]).to include('non-empty string')
+      end
+
+      it 'returns error for tool_name with special characters' do
+        result = executor.execute_tool('tool-name', {})
+
+        expect(result[:error]).to include('non-empty string')
+      end
+
+      it 'returns error for tool_name with uppercase letters' do
+        result = executor.execute_tool('ToolName', {})
 
         expect(result[:error]).to include('non-empty string')
       end
