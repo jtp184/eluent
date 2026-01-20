@@ -20,11 +20,12 @@ module Eluent
           example 'el discard list', 'List all discarded items'
           example 'el discard restore ID', 'Restore a discarded item'
           example 'el discard prune --days 30', 'Permanently delete items discarded >30 days ago'
+          example 'el discard prune --ephemeral -f', 'Force prune ephemeral items'
         end
 
         argument :action_or_id do
           required
-          desc 'Action (list, restore, prune) or item ID to discard'
+          desc 'Action (list, restore, prune) or item ID to discard. If not a known action, treated as item ID'
         end
 
         argument :item_id do

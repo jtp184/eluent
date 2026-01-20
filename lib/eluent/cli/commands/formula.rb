@@ -17,6 +17,7 @@ module Eluent
           example 'el formula list', 'List all formulas'
           example 'el formula show ID', 'Show formula details'
           example 'el formula instantiate ID --var name=value', 'Create items from template'
+          example 'el formula instantiate ID -V version=2.0 -V env=prod', 'Instantiate with multiple variables'
           example 'el formula distill ROOT_ID --id new-formula --extract "v2.0=version"', 'Extract formula from work'
           example 'el formula compose A B --type sequential --id combined', 'Combine formulas'
           example 'el formula attach ID TARGET --type parallel', 'Attach formula to existing item'

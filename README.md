@@ -35,14 +35,144 @@ gem install eluent
 
 ## Getting Started
 
+### Basic Operations
+
 ```bash
 el init                      # Initialize .eluent/ in current repo
 el create --title "My task"  # Create a work item
-el list                      # List items
+el list                      # List open items
+el list --all                # List all items including closed
+el show ID                   # Show item details
 el ready                     # Show ready-to-work items
-el dep add A B               # Add dependency: A blocks on B
-el sync                      # Sync with git
 ```
+
+### Item Lifecycle
+
+```bash
+el update ID --status in_progress   # Start working on item
+el update ID --priority 1           # Set high priority
+el update ID --assignee @me         # Assign to yourself
+el close ID                         # Mark item as done
+el reopen ID                        # Reopen a closed item
+```
+
+### Dependencies
+
+```bash
+el dep add A B               # A blocks B (A must complete first)
+el dep add A B --type related       # Add informational link
+el dep list ID               # Show dependencies for an item
+el dep tree ID               # Visualize dependency tree
+el dep check                 # Find issues in dependency graph
+```
+
+### Comments
+
+```bash
+el comment add ID "My note"  # Add a comment
+el comment list ID           # List comments on item
+```
+
+### Discard and Restore
+
+```bash
+el discard ID                # Soft delete an item
+el discard list              # List discarded items
+el discard restore ID        # Restore a discarded item
+el discard prune --days 30   # Permanently delete old discards
+```
+
+### Formulas (Templates)
+
+```bash
+el formula list              # List available formulas
+el formula show ID           # Show formula details
+el formula instantiate ID -V name=value  # Create items from template
+```
+
+### Sync and Daemon
+
+```bash
+el sync                      # Sync with git
+el daemon start              # Start background sync daemon
+el daemon stop               # Stop daemon
+el daemon status             # Check daemon status
+```
+
+### Configuration
+
+```bash
+el config show               # Show current configuration
+el config get key            # Get a config value
+el config set key value      # Set a config value
+```
+
+## Reference
+
+### Status Values
+
+| Status | Description |
+|--------|-------------|
+| `open` | New or ready to work on |
+| `in_progress` | Currently being worked on |
+| `blocked` | Waiting on dependencies |
+| `deferred` | Postponed until later |
+| `closed` | Completed |
+| `discard` | Soft-deleted |
+
+### Issue Types
+
+| Type | Description |
+|------|-------------|
+| `task` | Default work item |
+| `feature` | New functionality |
+| `bug` | Defect to fix |
+| `artifact` | Non-actionable record |
+| `epic` | Abstract container (cannot be closed directly) |
+| `formula` | Template definition (abstract) |
+
+### Dependency Types
+
+**Blocking** (affects readiness):
+- `blocks` - Source must complete before target can start (default)
+- `parent_child` - Hierarchical containment
+- `conditional_blocks` - Blocks under certain conditions
+- `waits_for` - Target waits for source
+
+**Informational** (no blocking effect):
+- `related` - General relationship
+- `duplicates` - Marks duplicate items
+- `discovered_from` - Origin tracking
+- `replies_to` - Response to another item
+
+### Priority Levels
+
+| Level | Meaning |
+|-------|---------|
+| 0 | Critical - highest priority |
+| 1 | High |
+| 2 | Medium (default) |
+| 3 | Low |
+| 4 | Minimal |
+| 5 | None - lowest priority |
+
+### Sort Policies for `el ready`
+
+| Policy | Description |
+|--------|-------------|
+| `priority` | Sort by priority (lowest number first) |
+| `oldest` | Sort by creation date (oldest first) |
+| `hybrid` | Priority first, then age within same priority |
+
+## Plugins
+
+Eluent supports plugins from three sources:
+
+- **Local**: `.eluent/plugins/*.rb` in your repository
+- **Global**: `~/.eluent/plugins/*.rb` in your home directory
+- **Gems**: Any installed gem named `eluent-*`
+
+Plugins can add lifecycle hooks, custom commands, and new types. See [Plugin Development Guide](docs/PLUGIN_DEVELOPMENT.md) for details.
 
 ## Development
 

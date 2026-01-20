@@ -21,12 +21,12 @@ module Eluent
         option :status do
           short '-s'
           long '--status STATUS'
-          desc 'Filter by status (open, in_progress, blocked, deferred, closed)'
+          desc 'Filter by status (open, in_progress, blocked, deferred, closed, discard)'
         end
 
         option :type do
           long '--type TYPE'
-          desc 'Filter by issue type (task, feature, bug, artifact, epic)'
+          desc 'Filter by issue type (task, feature, bug, artifact, epic, formula)'
         end
 
         option :assignee do

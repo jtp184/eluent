@@ -17,6 +17,7 @@ module Eluent
           desc 'Manage dependencies between work items'
           example 'el dep add SOURCE TARGET', 'Add dependency: SOURCE blocks TARGET'
           example 'el dep add SOURCE TARGET --type waits_for', 'Add waits_for dependency'
+          example 'el dep add A B --type related', 'Add informational relationship'
           example 'el dep remove SOURCE TARGET', 'Remove dependency'
           example 'el dep list ID', 'List dependencies for an item'
           example 'el dep tree ID', 'Show dependency tree'
@@ -41,7 +42,8 @@ module Eluent
         option :type do
           short '-t'
           long '--type TYPE'
-          desc 'Dependency type (default: blocks)'
+          desc 'Type: blocks (default), parent_child, conditional_blocks, waits_for, ' \
+               'related, duplicates, discovered_from, replies_to'
           default 'blocks'
         end
 
@@ -58,10 +60,7 @@ module Eluent
         end
 
         def run
-          if params[:help]
-            puts help
-            return 0
-          end
+          return 0.tap { puts help } if params[:help]
 
           action = params[:action]
 
@@ -216,12 +215,9 @@ module Eluent
           short_id = repository.id_resolver.short_id(atom)
           puts "#{@pastel.bold('Dependencies for')} #{short_id} (#{truncate(atom.title, max_length: 40)})\n\n"
 
-          output_bond_section(bonds[:outgoing], 'Blocks (outgoing)', :target_id)
-          output_bond_section(bonds[:incoming], 'Blocked by (incoming)', :source_id)
-
-          return unless bonds[:outgoing].empty? && bonds[:incoming].empty?
-
-          puts @pastel.dim('No dependencies')
+          output_bond_section(bonds[:outgoing], 'Depends on', :target_id)
+          output_bond_section(bonds[:incoming], 'Depended on by', :source_id)
+          puts @pastel.dim('No dependencies') if bonds[:outgoing].empty? && bonds[:incoming].empty?
         end
 
         def output_bond_section(bonds, title, id_method)
