@@ -565,10 +565,6 @@ spec.add_development_dependency "fakefs", "~> 2.5"      # Filesystem mocking
 spec.add_development_dependency "timecop", "~> 0.9"    # Time manipulation
 spec.add_development_dependency "webmock", "~> 3.23"   # HTTP request stubbing
 
-# Type checking
-spec.add_development_dependency "steep", "~> 1.6"      # Gradual typing
-spec.add_development_dependency "rbs", "~> 3.4"        # Type signatures
-
 # Code quality
 spec.add_development_dependency "rubocop", "~> 1.60"
 spec.add_development_dependency "rubocop-rspec", "~> 2.26"
@@ -1270,4 +1266,4 @@ el sync
 3. **Sync/Daemon** - Git sync, Unix socket daemon
 4. **Formulas** - Templates and compaction
 5. **Extensions** - Plugins and AI integration
-6. **Polish** - Tests, types, documentation
+6. **Polish** - Tests, documentation

@@ -265,7 +265,7 @@ Plugins and AI integration
 
 ## Phase 6: Polish
 
-Tests, types, documentation
+Tests, documentation
 
 ### Testing
 
@@ -282,11 +282,6 @@ Tests, types, documentation
 - [x] Sync 3-way merge scenario tests
 
 **Total: 1541 examples passing**
-
-### Type Checking
-
-- [ ] RBS type signatures for public APIs
-- [ ] Steep configuration and type checking
 
 ### Documentation
 

@@ -16,10 +16,6 @@ gem 'rspec', '~> 3.13'
 gem 'timecop', '~> 0.9'
 gem 'webmock', '~> 3.23'
 
-# Type checking
-gem 'rbs', '~> 3.4'
-gem 'steep', '~> 1.6'
-
 # Code quality
 gem 'rubocop', '~> 1.60'
 gem 'rubocop-factory_bot', '~> 2.26', require: false
