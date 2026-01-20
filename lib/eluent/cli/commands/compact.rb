@@ -14,9 +14,10 @@ module Eluent
         usage do
           program 'el compact'
           desc 'Manage compaction of old closed items'
-          example 'el compact run --tier 1 [--preview]', 'Compact old items to tier 1'
-          example 'el compact run --tier 2', 'Compact old items to tier 2 (more aggressive)'
+          example 'el compact run --tier 1 [--preview]', 'Compact old items to tier 1 (truncate descriptions)'
+          example 'el compact run --tier 2', 'Compact to tier 2 (remove descriptions and comments)'
           example 'el compact restore ID', 'Restore compacted item from git history'
+          example 'el compact restore ID --preview', 'Preview what would be restored'
         end
 
         argument :action do

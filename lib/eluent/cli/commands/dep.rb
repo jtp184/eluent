@@ -17,6 +17,7 @@ module Eluent
           desc 'Manage dependencies between work items'
           example 'el dep add SOURCE TARGET', 'Add dependency: SOURCE blocks TARGET'
           example 'el dep add SOURCE TARGET --type waits_for', 'Add waits_for dependency'
+          example 'el dep add A B --type related', 'Add informational relationship'
           example 'el dep remove SOURCE TARGET', 'Remove dependency'
           example 'el dep list ID', 'List dependencies for an item'
           example 'el dep tree ID', 'Show dependency tree'
@@ -41,7 +42,7 @@ module Eluent
         option :type do
           short '-t'
           long '--type TYPE'
-          desc 'Dependency type (default: blocks)'
+          desc 'Dependency type: blocks, parent_child, conditional_blocks, waits_for (blocking); related, duplicates, discovered_from, replies_to (informational). Default: blocks'
           default 'blocks'
         end
 
