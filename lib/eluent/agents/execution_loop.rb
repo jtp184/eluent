@@ -111,6 +111,11 @@ module Eluent
         ExecutionResult.failure(error: e.message, atom: atom)
       end
 
+      # Claim an atom for processing by this agent
+      # NOTE: This has a TOCTOU race condition between checking status and updating.
+      # Multiple agents could simultaneously claim the same atom. For multi-agent
+      # deployments, the repository should implement optimistic locking (version field)
+      # or atomic compare-and-swap semantics. Single-agent usage is safe.
       def claim_atom(atom)
         return false if atom.status == Models::Status[:in_progress] && atom.assignee != configuration.agent_id
 

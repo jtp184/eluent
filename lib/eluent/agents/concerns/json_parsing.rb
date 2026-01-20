@@ -11,7 +11,8 @@ module Eluent
 
         def parse_json(str)
           JSON.parse(str)
-        rescue JSON::ParserError
+        rescue JSON::ParserError => e
+          warn "[Eluent] Failed to parse JSON: #{e.message}" if ENV['ELUENT_DEBUG']
           {}
         end
 

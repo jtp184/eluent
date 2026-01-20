@@ -7,8 +7,8 @@ module Eluent
     # Coordinates plugin discovery, loading, and hook invocation
     # Central entry point for the plugin system
     class PluginManager
-      LOCAL_PLUGINS_DIR = '.eluent/plugins'
-      GLOBAL_PLUGINS_DIR = '.eluent/plugins'
+      # Relative path for plugins directory (used for both local and global)
+      PLUGINS_DIR = '.eluent/plugins'
 
       attr_reader :hooks, :registry, :gem_loader
 
@@ -39,6 +39,7 @@ module Eluent
 
       # Register a plugin
       # This is the main entry point called by plugins
+      # Uses transaction pattern: register first, rollback on block failure
       # @param name [String] Plugin name
       # @param path [String, nil] File path the plugin was loaded from
       def register(name, path: nil, &block)
@@ -46,6 +47,11 @@ module Eluent
         context = PluginContext.new(name: name, hooks_manager: hooks, registry: registry)
         context.instance_eval(&block) if block
         info
+      rescue StandardError
+        # Rollback: cleanup registry and any partial hook registrations on failure
+        registry.unregister(name)
+        hooks.unregister(name)
+        raise
       end
 
       # Invoke a hook
@@ -99,12 +105,12 @@ module Eluent
       private
 
       def load_local_plugins(base_path)
-        dir = File.join(base_path, LOCAL_PLUGINS_DIR)
+        dir = File.join(base_path, PLUGINS_DIR)
         load_plugins_from_dir(dir, source: :local)
       end
 
       def load_global_plugins
-        global_dir = File.join(Dir.home, GLOBAL_PLUGINS_DIR)
+        global_dir = File.join(Dir.home, PLUGINS_DIR)
         load_plugins_from_dir(global_dir, source: :global)
       rescue ArgumentError
         # Dir.home can raise ArgumentError if HOME is not set
@@ -124,11 +130,24 @@ module Eluent
       end
 
       def load_plugin_file(path, source:)
+        # Detect circular dependencies
+        loading_stack = Thread.current[:eluent_loading_plugins] ||= Set.new
+        if loading_stack.include?(path)
+          raise PluginLoadError.new(
+            "Circular dependency detected while loading plugin: #{path}",
+            path: path
+          )
+        end
+
+        loading_stack.add(path)
+
         # Store the path so register can use it
         Thread.current[:eluent_loading_plugin_path] = path
         Thread.current[:eluent_loading_plugin_source] = source
 
         load path
+      rescue PluginLoadError
+        raise
       rescue StandardError => e
         raise PluginLoadError.new(
           "Failed to load plugin from #{path}: #{e.message}",
@@ -137,14 +156,16 @@ module Eluent
       ensure
         Thread.current[:eluent_loading_plugin_path] = nil
         Thread.current[:eluent_loading_plugin_source] = nil
+        Thread.current[:eluent_loading_plugins]&.delete(path)
       end
     end
 
     # Module-level singleton and DSL
     class << self
-      # Get or create the global plugin manager
+      # Get or create the global plugin manager (thread-safe)
       def manager
-        @manager ||= PluginManager.new
+        @manager_mutex ||= Mutex.new
+        @manager_mutex.synchronize { @manager ||= PluginManager.new }
       end
 
       # Register a plugin using the module-level DSL
@@ -159,8 +180,11 @@ module Eluent
 
       # Reset the global manager (for testing)
       def reset!
-        manager.reset!
-        @manager = nil
+        @manager_mutex ||= Mutex.new
+        @manager_mutex.synchronize do
+          @manager&.reset!
+          @manager = nil
+        end
       end
     end
   end

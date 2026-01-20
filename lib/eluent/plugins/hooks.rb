@@ -73,7 +73,10 @@ module Eluent
       def invoke(name, context)
         validate_hook_name!(name)
 
-        hooks[name].each do |entry|
+        # Duplicate array for thread-safe iteration
+        entries = hooks[name].dup
+
+        entries.each do |entry|
           entry.callback.call(context)
         rescue HookAbortError => e
           return HookResult.halted(reason: e.reason || e.message, plugin: entry.plugin_name)

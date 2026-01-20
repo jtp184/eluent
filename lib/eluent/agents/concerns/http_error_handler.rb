@@ -8,7 +8,7 @@ module Eluent
         private
 
         def handle_response_errors!(response)
-          return if response.status == 200
+          return if response.status.between?(200, 299)
 
           body = parse_json(response.body.to_s)
           error_message = body.dig('error', 'message')
