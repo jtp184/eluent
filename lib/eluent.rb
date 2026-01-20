@@ -58,3 +58,16 @@ require_relative 'eluent/daemon/protocol'
 require_relative 'eluent/daemon/client'
 require_relative 'eluent/daemon/command_router'
 require_relative 'eluent/daemon/server'
+
+# Formulas
+require_relative 'eluent/models/formula'
+require_relative 'eluent/formulas/parser'
+require_relative 'eluent/formulas/variable_resolver'
+require_relative 'eluent/formulas/instantiator'
+require_relative 'eluent/formulas/distiller'
+require_relative 'eluent/formulas/composer'
+
+# Compaction
+require_relative 'eluent/compaction/summarizer'
+require_relative 'eluent/compaction/compactor'
+require_relative 'eluent/compaction/restorer'
