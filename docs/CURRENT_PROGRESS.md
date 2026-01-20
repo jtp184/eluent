@@ -1,6 +1,6 @@
 # Eluent Implementation Progress
 
-**Last Updated**: 2026-01-19 (Phase 4 complete)
+**Last Updated**: 2026-01-20 (Phase 5 complete)
 
 This document tracks progress towards completing the implementation plan defined in `IMPLEMENTATION_PLAN.md`.
 
@@ -14,10 +14,10 @@ This document tracks progress towards completing the implementation plan defined
 | Phase 2: Graph Operations | Complete | 100% |
 | Phase 3: Sync and Daemon | Complete | 100% |
 | Phase 4: Formulas and Compaction | Complete | 100% |
-| Phase 5: Extensions and AI | Not Started | 0% |
-| Phase 6: Polish | In Progress | 75% |
+| Phase 5: Extensions and AI | Complete | 100% |
+| Phase 6: Polish | In Progress | 80% |
 
-**Current State**: Production-ready with git sync, daemon support, formulas, compaction, 16 CLI commands, and 1087 test examples.
+**Current State**: Production-ready with git sync, daemon support, formulas, compaction, plugins, AI agent integration, 17 CLI commands, and 1343 test examples.
 
 ---
 
@@ -221,21 +221,46 @@ Plugins and AI integration
 
 ### Plugins
 
-- [ ] `lib/eluent/plugins/plugin_manager.rb` — Discovery and loading
-- [ ] `lib/eluent/plugins/plugin_context.rb` — Plugin DSL sandbox
-- [ ] `lib/eluent/plugins/hooks.rb` — Hook registration and invocation
-- [ ] `lib/eluent/plugins/gem_loader.rb` — Load eluent-* gems
+- [x] `lib/eluent/plugins/plugin_manager.rb` — Discovery, loading, and hook invocation coordinator
+- [x] `lib/eluent/plugins/plugin_definition_context.rb` — Plugin DSL sandbox for registration-time configuration
+- [x] `lib/eluent/plugins/hooks_manager.rb` — Hook registration and invocation with priority ordering
+- [x] `lib/eluent/plugins/hook_context.rb` — Runtime context passed to hook callbacks
+- [x] `lib/eluent/plugins/plugin_registry.rb` — Plugin metadata tracking and command registration
+- [x] `lib/eluent/plugins/gem_loader.rb` — Load eluent-* gems from installed gems
+- [x] `lib/eluent/plugins/errors.rb` — Plugin-specific error types (PluginLoadError, InvalidPluginError, HookAbortError)
 
 ### Agents
 
-- [ ] `lib/eluent/agents/agent_executor.rb` — Abstract AI interface
-- [ ] `lib/eluent/agents/execution_loop.rb` — Standard agent work loop
-- [ ] `lib/eluent/agents/implementations/claude_executor.rb` — Claude integration
-- [ ] `lib/eluent/agents/implementations/openai_executor.rb` — OpenAI integration
+- [x] `lib/eluent/agents/agent_executor.rb` — Abstract AI interface with tool implementations
+- [x] `lib/eluent/agents/execution_loop.rb` — Standard agent work loop (claim, execute, sync)
+- [x] `lib/eluent/agents/implementations/claude_executor.rb` — Claude API integration
+- [x] `lib/eluent/agents/implementations/openai_executor.rb` — OpenAI API integration
+- [x] `lib/eluent/agents/configuration.rb` — Agent configuration (API keys, timeouts, agent ID)
+- [x] `lib/eluent/agents/tool_definitions.rb` — Tool schemas for Claude and OpenAI function calling
+- [x] `lib/eluent/agents/errors.rb` — Agent error types (ConfigurationError, ApiError, TimeoutError)
+- [x] `lib/eluent/agents/concerns/timeout_handler.rb` — Shared timeout checking logic
+- [x] `lib/eluent/agents/concerns/http_error_handler.rb` — HTTP response error handling
+- [x] `lib/eluent/agents/concerns/json_parsing.rb` — JSON parsing with close detection
 
 ### CLI Commands (Phase 5)
 
-- [ ] `lib/eluent/cli/commands/plugin.rb` — Plugin management (list/install/enable/disable/hook)
+- [x] `lib/eluent/cli/commands/plugin.rb` — Plugin management (list, hooks)
+
+### Specs
+
+- [x] `spec/eluent/plugins/plugin_manager_spec.rb` — Plugin manager behavior
+- [x] `spec/eluent/plugins/hooks_manager_spec.rb` — Hook registration and invocation
+- [x] `spec/eluent/plugins/hook_context_spec.rb` — Hook context behavior
+- [x] `spec/eluent/plugins/plugin_registry_spec.rb` — Plugin registry operations
+- [x] `spec/eluent/plugins/plugin_definition_context_spec.rb` — DSL context behavior
+- [x] `spec/eluent/plugins/gem_loader_spec.rb` — Gem loading behavior
+- [x] `spec/eluent/agents/agent_executor_spec.rb` — Base executor and tool implementations
+- [x] `spec/eluent/agents/execution_loop_spec.rb` — Work loop behavior
+- [x] `spec/eluent/agents/configuration_spec.rb` — Configuration validation
+- [x] `spec/eluent/agents/tool_definitions_spec.rb` — Tool schema generation
+- [x] `spec/eluent/agents/implementations/claude_executor_spec.rb` — Claude executor behavior
+- [x] `spec/eluent/agents/implementations/openai_executor_spec.rb` — OpenAI executor behavior
+- [x] `spec/eluent/cli/commands/plugin_spec.rb` — Plugin CLI commands
 
 ---
 
@@ -251,11 +276,13 @@ Tests, types, documentation
 - [x] Unit tests for registry (id_generator, id_resolver, repo_registry, repo_context)
 - [x] Unit tests for sync (git_adapter, merge_engine, sync_state, conflict_resolver, orchestrator)
 - [x] Unit tests for daemon (server, protocol, command_router, client)
+- [x] Unit tests for plugins (plugin_manager, hooks_manager, hook_context, plugin_registry, gem_loader)
+- [x] Unit tests for agents (agent_executor, execution_loop, claude_executor, openai_executor, configuration, tool_definitions)
 - [ ] Integration tests for CLI commands
 - [x] Daemon concurrent access tests
 - [x] Sync 3-way merge scenario tests
 
-**Total: 1087 examples passing**
+**Total: 1343 examples passing**
 
 ### Type Checking
 
@@ -289,3 +316,17 @@ Tests, types, documentation
 - All 4 blocking types implemented with transitive resolution
 - BlockingResolver caches results with manual invalidation
 - Ready work excludes abstract types (epic, formula) by default
+
+### Plugin System
+- Three plugin sources: local (`.eluent/plugins/`), global (`~/.eluent/plugins/`), gems (`eluent-*`)
+- Thread-safe plugin manager with mutex-protected singleton
+- Lifecycle hooks: `before_create`, `after_create`, `before_close`, `after_close`, `before_update`, `after_update`, `on_status_change`, `on_sync`
+- Hook execution stops on first error/abort for safety
+- Type extensions: `register_issue_type`, `register_status_type`, `register_dependency_type`
+
+### AI Agent Integration
+- Abstract `AgentExecutor` base class with tool implementations
+- Concrete executors for Claude and OpenAI APIs
+- `ExecutionLoop` handles: ready work discovery, atom claiming, execution, result handling, git sync
+- Tools available: `list_items`, `show_item`, `create_item`, `update_item`, `close_item`, `list_ready_items`, `add_dependency`, `add_comment`
+- Execution terminates when `close_item` tool is called
