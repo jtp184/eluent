@@ -28,7 +28,7 @@ RSpec.describe Eluent::CLI::Commands::Compact do
          Eluent::Compaction::RestoreError,
          Eluent::Registry::IdNotFoundError,
          Eluent::Storage::RepositoryNotFoundError => e
-    $stderr.puts "Error: #{e.message}"
+    warn "Error: #{e.message}"
     1
   end
 

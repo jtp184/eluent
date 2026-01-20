@@ -218,7 +218,7 @@ RSpec.describe Eluent::Models::Variable do
     end
 
     it 'returns falsey when no enum' do
-      expect(required_var.enum?).to be_falsey
+      expect(required_var).not_to be_enum
     end
   end
 

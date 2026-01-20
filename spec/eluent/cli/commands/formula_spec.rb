@@ -29,7 +29,7 @@ RSpec.describe Eluent::CLI::Commands::Formula do
          Eluent::Formulas::VariableError,
          Eluent::Registry::IdNotFoundError,
          Eluent::Storage::RepositoryNotFoundError => e
-    $stderr.puts "Error: #{e.message}"
+    warn "Error: #{e.message}"
     1
   end
 

@@ -2,6 +2,7 @@
 
 RSpec.describe Eluent::Formulas::Distiller do
   let(:root_path) { Dir.mktmpdir }
+  let(:distiller) { described_class.new(repository: repository) }
   let(:repository) do
     repo = Eluent::Storage::JsonlRepository.new(root_path)
     repo.init(repo_name: 'testrepo')
@@ -9,8 +10,6 @@ RSpec.describe Eluent::Formulas::Distiller do
   end
 
   after { FileUtils.rm_rf(root_path) }
-
-  let(:distiller) { described_class.new(repository: repository) }
 
   describe '#distill' do
     let!(:root_atom) do
@@ -38,7 +37,7 @@ RSpec.describe Eluent::Formulas::Distiller do
       )
     end
 
-    let!(:blocking_bond) do
+    before do
       repository.create_bond(
         source_id: design_atom.id,
         target_id: implement_atom.id,
@@ -150,25 +149,19 @@ RSpec.describe Eluent::Formulas::Distiller do
     end
 
     context 'with duplicate titles causing slugify collision' do
-      let!(:collision_root) do
+      let(:collision_root) do
         repository.create_atom(title: 'Collision Test', issue_type: :epic)
       end
 
-      let!(:child1) do
+      before do
         repository.create_atom(
           title: 'Hello World',
           parent_id: collision_root.id
         )
-      end
-
-      let!(:child2) do
         repository.create_atom(
           title: 'Hello-World',
           parent_id: collision_root.id
         )
-      end
-
-      let!(:child3) do
         repository.create_atom(
           title: 'Hello World',
           parent_id: collision_root.id

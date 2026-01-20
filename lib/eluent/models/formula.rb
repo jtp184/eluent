@@ -152,12 +152,6 @@ module Eluent
         @pattern = pattern ? build_pattern(pattern) : nil
       end
 
-      private def build_pattern(pattern)
-        Regexp.new(pattern)
-      rescue RegexpError => e
-        raise ValidationError, "invalid pattern for variable '#{@name}': #{e.message}"
-      end
-
       # A variable is only truly required if marked required AND has no default.
       # Variables with defaults are effectively optional since the default fills in.
       def required?
@@ -217,6 +211,14 @@ module Eluent
 
       def hash
         name.hash
+      end
+
+      private
+
+      def build_pattern(pattern)
+        Regexp.new(pattern)
+      rescue RegexpError => e
+        raise ValidationError, "invalid pattern for variable '#{@name}': #{e.message}"
       end
     end
 

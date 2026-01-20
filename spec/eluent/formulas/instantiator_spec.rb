@@ -2,16 +2,7 @@
 
 RSpec.describe Eluent::Formulas::Instantiator do
   let(:root_path) { Dir.mktmpdir }
-  let(:repository) do
-    repo = Eluent::Storage::JsonlRepository.new(root_path)
-    repo.init(repo_name: 'testrepo')
-    repo
-  end
-
-  after { FileUtils.rm_rf(root_path) }
-
   let(:instantiator) { described_class.new(repository: repository) }
-
   let(:formula) do
     Eluent::Models::Formula.new(
       id: 'test-workflow',
@@ -27,6 +18,13 @@ RSpec.describe Eluent::Formulas::Instantiator do
       ]
     )
   end
+  let(:repository) do
+    repo = Eluent::Storage::JsonlRepository.new(root_path)
+    repo.init(repo_name: 'testrepo')
+    repo
+  end
+
+  after { FileUtils.rm_rf(root_path) }
 
   describe '#instantiate' do
     context 'without parent_id' do

@@ -2,6 +2,9 @@
 
 RSpec.describe Eluent::Compaction::Restorer do
   let(:root_path) { Dir.mktmpdir }
+  # Using double instead of instance_double because run_git is private
+  let(:git_adapter) { double('GitAdapter') } # rubocop:disable RSpec/VerifiedDoubles
+  let(:restorer) { described_class.new(repository: repository, git_adapter: git_adapter) }
   let(:repository) do
     repo = Eluent::Storage::JsonlRepository.new(root_path)
     repo.init(repo_name: 'testrepo')
@@ -9,10 +12,6 @@ RSpec.describe Eluent::Compaction::Restorer do
   end
 
   after { FileUtils.rm_rf(root_path) }
-
-  # Using double instead of instance_double because run_git is private
-  let(:git_adapter) { double('GitAdapter') }
-  let(:restorer) { described_class.new(repository: repository, git_adapter: git_adapter) }
 
   describe '#restore' do
     let!(:compacted_atom) do
@@ -112,6 +111,25 @@ RSpec.describe Eluent::Compaction::Restorer do
       )
     end
 
+    let(:historical_content) do
+      <<~JSONL
+        {"_type":"atom","id":"#{compacted_atom.id}","title":"Test","description":"Original"}
+      JSONL
+    end
+
+    before do
+      allow(git_adapter).to receive(:run_git) do |*args|
+        case args.first
+        when 'log'
+          { success: true, output: "abc123\n" }
+        when 'show'
+          { success: true, output: historical_content }
+        else
+          { success: false, output: '' }
+        end
+      end
+    end
+
     it 'returns false for non-compacted atoms' do
       non_compacted = repository.create_atom(title: 'Not Compacted')
       expect(restorer.can_restore?(non_compacted.id)).to be false
@@ -119,6 +137,10 @@ RSpec.describe Eluent::Compaction::Restorer do
 
     it 'returns false for non-existent atoms' do
       expect(restorer.can_restore?('nonexistent')).to be false
+    end
+
+    it 'returns true for compacted atoms' do
+      expect(restorer.can_restore?(compacted_atom.id)).to be true
     end
   end
 

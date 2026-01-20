@@ -75,7 +75,7 @@ RSpec.describe Eluent::Formulas::VariableResolver do
     end
 
     it 'returns true when all constraints pass' do
-      # Note: 'owner' is referenced but not defined in variables, so this will fail
+      # NOTE: 'owner' is referenced but not defined in variables, so this will fail
       # For a passing case, we need to either add owner to variables or use a formula without it
       formula_without_owner = Eluent::Models::Formula.new(
         id: 'simple',

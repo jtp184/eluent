@@ -2,6 +2,7 @@
 
 RSpec.describe Eluent::Compaction::Compactor do
   let(:root_path) { Dir.mktmpdir }
+  let(:compactor) { described_class.new(repository: repository) }
   let(:repository) do
     repo = Eluent::Storage::JsonlRepository.new(root_path)
     repo.init(repo_name: 'testrepo')
@@ -9,8 +10,6 @@ RSpec.describe Eluent::Compaction::Compactor do
   end
 
   after { FileUtils.rm_rf(root_path) }
-
-  let(:compactor) { described_class.new(repository: repository) }
 
   describe '#find_candidates' do
     let(:old_time) { Time.now.utc - (60 * 24 * 60 * 60) } # 60 days ago

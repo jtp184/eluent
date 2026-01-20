@@ -73,7 +73,7 @@ RSpec.describe Eluent::Formulas::Parser, :filesystem do
 
     context 'when YAML is invalid' do
       before do
-        write_formula('invalid', "title: [unclosed bracket")
+        write_formula('invalid', 'title: [unclosed bracket')
       end
 
       it 'raises ParseError' do

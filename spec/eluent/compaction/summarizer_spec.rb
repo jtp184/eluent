@@ -2,6 +2,7 @@
 
 RSpec.describe Eluent::Compaction::Summarizer do
   let(:root_path) { Dir.mktmpdir }
+  let(:summarizer) { described_class.new(repository: repository) }
   let(:repository) do
     repo = Eluent::Storage::JsonlRepository.new(root_path)
     repo.init(repo_name: 'testrepo')
@@ -9,8 +10,6 @@ RSpec.describe Eluent::Compaction::Summarizer do
   end
 
   after { FileUtils.rm_rf(root_path) }
-
-  let(:summarizer) { described_class.new(repository: repository) }
 
   describe '#summarize_description' do
     let(:atom) do
