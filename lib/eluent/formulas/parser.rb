@@ -82,7 +82,15 @@ module Eluent
       end
 
       def formula_file_path(formula_id)
+        validate_formula_id_format(formula_id)
         File.join(formulas_dir, "#{formula_id}.yaml")
+      end
+
+      def validate_formula_id_format(formula_id)
+        return if formula_id.is_a?(String) && formula_id.match?(/\A[a-z0-9-]+\z/)
+
+        raise ParseError.new("formula id must match [a-z0-9-]+, got: #{formula_id.inspect}",
+                             formula_id: formula_id&.to_s)
       end
 
       def ensure_formulas_dir_exists
