@@ -13,7 +13,7 @@ module Eluent
       COMMANDS = %w[
         init create list show update close reopen
         config ready dep comment discard sync daemon
-        formula compact
+        formula compact plugin
       ].freeze
 
       ERROR_CODES = {
@@ -36,7 +36,13 @@ module Eluent
         Formulas::ParseError => 'PARSE_ERROR',
         Formulas::VariableError => 'VALIDATION_ERROR',
         Compaction::CompactionError => 'COMPACTION_ERROR',
-        Compaction::RestoreError => 'RESTORE_ERROR'
+        Compaction::RestoreError => 'RESTORE_ERROR',
+        Plugins::PluginLoadError => 'PLUGIN_ERROR',
+        Plugins::HookAbortError => 'HOOK_ABORTED',
+        Agents::ConfigurationError => 'CONFIG_ERROR',
+        Agents::AuthenticationError => 'AUTH_ERROR',
+        Agents::RateLimitError => 'RATE_LIMIT',
+        Agents::ExecutionError => 'EXECUTION_ERROR'
       }.freeze
 
       EXIT_CODES = {
@@ -46,7 +52,9 @@ module Eluent
         'GIT_ERROR' => 5, 'NO_REMOTE' => 5,
         'DAEMON_RUNNING' => 6, 'DAEMON_NOT_RUNNING' => 6, 'PROTOCOL_ERROR' => 6,
         'CONNECTION_ERROR' => 7, 'TIMEOUT' => 7,
-        'COMPACTION_ERROR' => 8, 'RESTORE_ERROR' => 8
+        'COMPACTION_ERROR' => 8, 'RESTORE_ERROR' => 8,
+        'PLUGIN_ERROR' => 9, 'HOOK_ABORTED' => 9,
+        'CONFIG_ERROR' => 10, 'AUTH_ERROR' => 10, 'RATE_LIMIT' => 10, 'EXECUTION_ERROR' => 10
       }.freeze
 
       usage do

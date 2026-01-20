@@ -543,6 +543,129 @@ step 'Show compaction help'
 el 'compact --help'
 
 # ============================================================
+section '17. PLUGINS (Extensibility)'
+# ============================================================
+
+step 'List loaded plugins (none by default)'
+el 'plugin list'
+
+step 'Show registered hooks (empty)'
+el 'plugin hooks'
+
+step 'Create a sample plugin that validates priority'
+plugins_dir = DEMO_DIR / '.eluent' / 'plugins'
+FileUtils.mkdir_p(plugins_dir)
+
+File.write(plugins_dir / 'priority_validator.rb', <<~RUBY)
+  # frozen_string_literal: true
+
+  # Example plugin: validates that high-priority items have descriptions
+  # Hooks are invoked when integrated at the application layer
+  Eluent::Plugins.register 'priority-validator' do
+    # Run before creating any item (priority 50 = runs early)
+    before_create(priority: 50) do |ctx|
+      item = ctx.item
+      # Require description for priority 0-1 items
+      if item.priority && item.priority <= 1 && (item.description.nil? || item.description.empty?)
+        ctx.halt!('High-priority items (0-1) must have a description')
+      end
+    end
+
+    # Log after items are created
+    after_create do |ctx|
+      puts "  [priority-validator] Created: \#{ctx.item.title}"
+    end
+  end
+RUBY
+
+step 'Create a notification plugin'
+File.write(plugins_dir / 'notifier.rb', <<~RUBY)
+  # frozen_string_literal: true
+
+  # Example plugin: logs notifications on status changes
+  Eluent::Plugins.register 'notifier' do
+    # Track status changes (priority 100 = default)
+    on_status_change(priority: 100) do |ctx|
+      old_status = ctx.changes[:old_status]
+      new_status = ctx.changes[:new_status]
+      puts "  [notifier] Status: \#{old_status} -> \#{new_status}"
+    end
+
+    # Track closed items
+    after_close do |ctx|
+      puts "  [notifier] Closed: \#{ctx.item.title}"
+    end
+
+    # Sync notifications
+    on_sync do |ctx|
+      puts "  [notifier] Sync completed"
+    end
+  end
+RUBY
+
+step 'List plugins (now shows our custom plugins)'
+el 'plugin list'
+
+step 'Show registered hooks (now populated)'
+el 'plugin hooks'
+
+step 'Plugin list in robot mode'
+el 'plugin list --robot'
+
+step 'Hooks in robot mode'
+el 'plugin hooks --robot'
+
+# ============================================================
+section '18. AI AGENT INTEGRATION (Library Demo)'
+# ============================================================
+
+puts <<~MSG
+
+  \e[33mNote: The AI Agent system is a library feature, not a CLI command.\e[0m
+  It provides programmatic integration with Claude and OpenAI APIs.
+
+  \e[36mKey components:\e[0m
+  - AgentExecutor: Abstract base for AI integrations
+  - ClaudeExecutor: Claude API implementation
+  - OpenAIExecutor: OpenAI API implementation
+  - ExecutionLoop: Automated work processing loop
+
+  \e[36mAvailable tools for agents:\e[0m
+  - list_items: Query items with filters
+  - show_item: Get item details
+  - create_item: Create new items
+  - update_item: Modify existing items
+  - close_item: Complete work items
+  - list_ready_items: Find actionable work
+  - add_dependency: Create relationships
+  - add_comment: Add discussion
+
+  \e[36mExample usage (Ruby):\e[0m
+
+    config = Eluent::Agents::Configuration.new(
+      provider: :claude,
+      api_key: ENV['ANTHROPIC_API_KEY'],
+      agent_id: 'agent-001'
+    )
+
+    executor = Eluent::Agents::ClaudeExecutor.new(
+      repository: repo,
+      configuration: config
+    )
+
+    loop = Eluent::Agents::ExecutionLoop.new(
+      repository: repo,
+      executor: executor,
+      configuration: config
+    )
+
+    # Process up to 5 ready items
+    result = loop.run(max_iterations: 5)
+    puts result.summary
+
+MSG
+
+# ============================================================
 section 'SUMMARY'
 # ============================================================
 
@@ -550,7 +673,16 @@ puts "\n\e[35mDemo completed successfully!\e[0m"
 puts "\nData stored in: #{DEMO_DIR}/.eluent/"
 puts "\nFiles created:"
 Dir.glob("#{DEMO_DIR}/.eluent/*").each do |f|
-  puts "  #{File.basename(f)} (#{File.size(f)} bytes)"
+  if File.directory?(f)
+    puts "  #{File.basename(f)}/ (directory)"
+  else
+    puts "  #{File.basename(f)} (#{File.size(f)} bytes)"
+  end
+end
+
+puts "\n\e[35mPlugins directory:\e[0m"
+Dir.glob("#{DEMO_DIR}/.eluent/plugins/*").each do |f|
+  puts "  #{File.basename(f)}"
 end
 
 puts "\n\e[35mData file contents:\e[0m"

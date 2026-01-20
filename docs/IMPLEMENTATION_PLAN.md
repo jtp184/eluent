@@ -474,12 +474,13 @@ el discard prune --ephemeral  # Permanently delete discarded ephemeral items
 | `lib/eluent/graph/dependency_graph.rb` | DAG structure |
 | `lib/eluent/graph/cycle_detector.rb` | Prevent cycles |
 | `lib/eluent/graph/blocking_resolver.rb` | Transitive blocking for all dep types |
-| `lib/eluent/lifecycle/transition.rb` | State machine |
 | `lib/eluent/lifecycle/readiness_calculator.rb` | Ready work query with type exclusions |
 | `lib/eluent/cli/commands/ready.rb` | Show ready items with sort policies |
 | `lib/eluent/cli/commands/dep.rb` | Dependency management |
 | `lib/eluent/cli/commands/comment.rb` | Comment add/list management |
 | `lib/eluent/cli/commands/discard.rb` | Soft deletion (list/restore/prune) |
+
+Note: Status transition logic is built into `lib/eluent/models/status.rb` via the `can_transition_to?` and `can_transition_from?` methods.
 
 ### Phase 3: Sync and Daemon
 | File | Purpose |
@@ -488,10 +489,13 @@ el discard prune --ephemeral  # Permanently delete discarded ephemeral items
 | `lib/eluent/sync/merge_engine.rb` | 3-way merge |
 | `lib/eluent/sync/pull_first_orchestrator.rb` | Pull-first sync flow |
 | `lib/eluent/sync/sync_state.rb` | .sync-state file handling |
+| `lib/eluent/sync/conflict_resolver.rb` | Conflict resolution with resurrection rule |
 | `lib/eluent/registry/repo_registry.rb` | Cross-repo registry (~/.eluent/repos.jsonl) |
+| `lib/eluent/registry/repo_context.rb` | Repository context management with caching |
 | `lib/eluent/daemon/server.rb` | Unix socket server |
 | `lib/eluent/daemon/protocol.rb` | Length-prefixed JSON protocol |
 | `lib/eluent/daemon/command_router.rb` | Route to handlers |
+| `lib/eluent/daemon/client.rb` | Daemon client for CLI communication |
 | `lib/eluent/cli/commands/sync.rb` | Sync command |
 | `lib/eluent/cli/commands/daemon.rb` | Daemon management |
 
@@ -508,17 +512,29 @@ el discard prune --ephemeral  # Permanently delete discarded ephemeral items
 | `lib/eluent/compaction/summarizer.rb` | Summarize content for compaction |
 | `lib/eluent/compaction/restorer.rb` | Restore original content from git history |
 | `lib/eluent/cli/commands/formula.rb` | Formula commands (list/show/instantiate/distill/compose/attach) |
+| `lib/eluent/cli/commands/compact.rb` | Compaction commands (run/status/restore) |
 
 ### Phase 5: Extensions and AI
 | File | Purpose |
 |------|---------|
-| `lib/eluent/plugins/plugin_manager.rb` | Discovery and loading |
-| `lib/eluent/plugins/plugin_context.rb` | Plugin DSL sandbox |
-| `lib/eluent/plugins/hooks.rb` | Hook registration and invocation |
-| `lib/eluent/agents/agent_executor.rb` | Abstract AI interface |
-| `lib/eluent/agents/implementations/claude_executor.rb` | Claude integration |
-| `lib/eluent/agents/implementations/openai_executor.rb` | OpenAI integration |
-| `lib/eluent/agents/execution_loop.rb` | Standard agent work loop |
+| `lib/eluent/plugins/plugin_manager.rb` | Discovery, loading, and hook invocation coordinator |
+| `lib/eluent/plugins/plugin_definition_context.rb` | Plugin DSL sandbox for registration-time configuration |
+| `lib/eluent/plugins/hooks_manager.rb` | Hook registration and invocation with priority ordering |
+| `lib/eluent/plugins/hook_context.rb` | Runtime context passed to hook callbacks |
+| `lib/eluent/plugins/plugin_registry.rb` | Plugin metadata tracking and command registration |
+| `lib/eluent/plugins/gem_loader.rb` | Load eluent-* gems from installed gems |
+| `lib/eluent/plugins/errors.rb` | Plugin-specific error types |
+| `lib/eluent/agents/agent_executor.rb` | Abstract AI interface with tool implementations |
+| `lib/eluent/agents/implementations/claude_executor.rb` | Claude API integration |
+| `lib/eluent/agents/implementations/openai_executor.rb` | OpenAI API integration |
+| `lib/eluent/agents/execution_loop.rb` | Standard agent work loop (claim, execute, sync) |
+| `lib/eluent/agents/configuration.rb` | Agent configuration (API keys, timeouts, agent ID) |
+| `lib/eluent/agents/tool_definitions.rb` | Tool schemas for Claude and OpenAI function calling |
+| `lib/eluent/agents/errors.rb` | Agent error types (ConfigurationError, ApiError, TimeoutError) |
+| `lib/eluent/agents/concerns/timeout_handler.rb` | Shared timeout checking logic |
+| `lib/eluent/agents/concerns/http_error_handler.rb` | HTTP response error handling |
+| `lib/eluent/agents/concerns/json_parsing.rb` | JSON parsing with close detection |
+| `lib/eluent/cli/commands/plugin.rb` | Plugin management (list, hooks) |
 
 ---
 
