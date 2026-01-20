@@ -11,7 +11,7 @@ This document tracks progress towards completing the Ledger Branch feature defin
 | Phase | Status | Progress |
 |-------|--------|----------|
 | Phase 1: GlobalPaths Infrastructure | Complete | 100% |
-| Phase 2: GitAdapter Extensions | Not Started | 0% |
+| Phase 2: GitAdapter Extensions | Complete | 100% |
 | Phase 3: LedgerSyncer Core | Not Started | 0% |
 | Phase 4: LedgerSyncState | Not Started | 0% |
 | Phase 5: ConfigLoader Updates | Not Started | 0% |
@@ -21,7 +21,7 @@ This document tracks progress towards completing the Ledger Branch feature defin
 | Phase 9: Stale Worktree Recovery | Not Started | 0% |
 | Phase 10: Stale Claim Management | Not Started | 0% |
 
-**Current State**: Phase 1 complete. Ready to start Phase 2.
+**Current State**: Phase 2 complete. Ready to start Phase 3.
 
 ---
 
@@ -57,25 +57,26 @@ Add branch and worktree git operations.
 
 ### Implementation
 
-- [ ] `lib/eluent/sync/git_adapter.rb` — Add methods:
-  - [ ] `#branch_exists?(branch, remote:)`
-  - [ ] `#create_orphan_branch(branch, initial_message:)`
-  - [ ] `#checkout(branch, create:)`
-  - [ ] `#worktree_list`
-  - [ ] `#worktree_add(path:, branch:)`
-  - [ ] `#worktree_remove(path:, force:)`
-  - [ ] `#worktree_prune`
-  - [ ] `#run_in_worktree(worktree_path, *args)`
-  - [ ] `#fetch_branch(remote:, branch:, timeout:)`
-  - [ ] `#push_branch(remote:, branch:, set_upstream:, timeout:)`
-  - [ ] `#remote_ref_sha(remote:, branch:)`
-  - [ ] `WorktreeError` exception
-  - [ ] `BranchError` exception
-  - [ ] `GitTimeoutError` exception
+- [x] `lib/eluent/sync/git_adapter.rb` — Add methods:
+  - [x] `#branch_exists?(branch, remote:)`
+  - [x] `#create_orphan_branch(branch, initial_message:)`
+  - [x] `#checkout(branch, create:)`
+  - [x] `#worktree_list`
+  - [x] `#worktree_add(path:, branch:)`
+  - [x] `#worktree_remove(path:, force:)`
+  - [x] `#worktree_prune`
+  - [x] `#run_git_in_worktree(worktree_path, *args)`
+  - [x] `#fetch_branch(remote:, branch:, timeout:)`
+  - [x] `#push_branch(remote:, branch:, set_upstream:, timeout:)`
+  - [x] `#remote_branch_sha(remote:, branch:)`
+  - [x] `WorktreeError` exception
+  - [x] `BranchError` exception (with `validate_branch_name!` class method)
+  - [x] `GitTimeoutError` exception
+  - [x] `WorktreeInfo` data class for worktree list results
 
 ### Specs
 
-- [ ] `spec/eluent/sync/git_adapter_spec.rb` — Extended specs for new methods
+- [x] `spec/eluent/sync/git_adapter_spec.rb` — Extended specs for new methods (89 examples, 0 failures)
 
 ---
 

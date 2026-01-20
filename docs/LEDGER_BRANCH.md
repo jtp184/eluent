@@ -118,13 +118,13 @@ def worktree_add(path:, branch:)
 def worktree_remove(path:, force: false)
 def worktree_prune
 
-# Worktree-specific git commands
-def run_in_worktree(worktree_path, *args)
+# Execute git commands in a specific worktree
+def run_git_in_worktree(worktree_path, *args)
 
-# Ledger operations
+# Ledger operations (network-aware with timeouts)
 def fetch_branch(remote:, branch:, timeout: 30)
 def push_branch(remote:, branch:, set_upstream: false, timeout: 30)
-def remote_ref_sha(remote:, branch:)  # Get current SHA without fetching
+def remote_branch_sha(remote:, branch:)  # Get SHA via ls-remote (no fetch required)
 ```
 
 New exceptions: `WorktreeError`, `BranchError`, `GitTimeoutError`
