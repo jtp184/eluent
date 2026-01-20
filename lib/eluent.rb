@@ -50,6 +50,7 @@ require_relative 'eluent/sync/git_adapter'
 require_relative 'eluent/sync/conflict_resolver'
 require_relative 'eluent/sync/merge_engine'
 require_relative 'eluent/sync/pull_first_orchestrator'
+require_relative 'eluent/sync/ledger_syncer'
 
 # Registry extensions
 require_relative 'eluent/registry/repo_registry'

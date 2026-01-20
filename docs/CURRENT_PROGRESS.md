@@ -12,7 +12,7 @@ This document tracks progress towards completing the Ledger Branch feature defin
 |-------|--------|----------|
 | Phase 1: GlobalPaths Infrastructure | Complete | 100% |
 | Phase 2: GitAdapter Extensions | Complete | 100% |
-| Phase 3: LedgerSyncer Core | Not Started | 0% |
+| Phase 3: LedgerSyncer Core | Complete | 100% |
 | Phase 4: LedgerSyncState | Not Started | 0% |
 | Phase 5: ConfigLoader Updates | Not Started | 0% |
 | Phase 6: CLI Commands | Not Started | 0% |
@@ -21,7 +21,7 @@ This document tracks progress towards completing the Ledger Branch feature defin
 | Phase 9: Stale Worktree Recovery | Not Started | 0% |
 | Phase 10: Stale Claim Management | Not Started | 0% |
 
-**Current State**: Phase 2 complete. Ready to start Phase 3.
+**Current State**: Phase 3 complete. Ready to start Phase 4.
 
 ---
 
@@ -86,29 +86,39 @@ Core class for atomic claims, pull/push ledger, worktree management.
 
 ### Implementation
 
-- [ ] `lib/eluent/sync/ledger_syncer.rb` — LedgerSyncer class with:
-  - [ ] Constants: `LEDGER_BRANCH`, `MAX_RETRIES`, `BASE_BACKOFF_MS`, `MAX_BACKOFF_MS`, `JITTER_FACTOR`
-  - [ ] Data types: `ClaimResult`, `SetupResult`, `SyncResult`
-  - [ ] `#initialize(repository:, git_adapter:, global_paths:, remote:, max_retries:, clock:)`
-  - [ ] `#available?`
-  - [ ] `#online?`
-  - [ ] `#healthy?`
-  - [ ] `#setup!`
-  - [ ] `#teardown!`
-  - [ ] `#claim_and_push(atom_id:, agent_id:)`
-  - [ ] `#pull_ledger`
-  - [ ] `#push_ledger`
-  - [ ] `#sync_to_main`
-  - [ ] `#seed_from_main`
-  - [ ] `#release_claim(atom_id:)`
-  - [ ] `#worktree_stale?`
-  - [ ] `#recover_stale_worktree!`
-  - [ ] `#reconcile_offline_claims!`
-  - [ ] Backoff with jitter implementation
+- [x] `lib/eluent/sync/ledger_syncer.rb` — LedgerSyncer class with:
+  - [x] Constants: `LEDGER_BRANCH`, `MAX_RETRIES`, `BASE_BACKOFF_MS`, `MAX_BACKOFF_MS`, `JITTER_FACTOR`
+  - [x] Data types: `ClaimResult`, `SetupResult`, `SyncResult`
+  - [x] `#initialize(repository:, git_adapter:, global_paths:, remote:, max_retries:, clock:)`
+  - [x] `#available?`
+  - [x] `#online?`
+  - [x] `#healthy?`
+  - [x] `#setup!`
+  - [x] `#teardown!`
+  - [x] `#claim_and_push(atom_id:, agent_id:)`
+  - [x] `#pull_ledger`
+  - [x] `#push_ledger`
+  - [x] `#sync_to_main`
+  - [x] `#seed_from_main`
+  - [x] `#release_claim(atom_id:)`
+  - [x] `#worktree_stale?`
+  - [x] `#recover_stale_worktree!`
+  - [x] `#reconcile_offline_claims!` (placeholder for Phase 4)
+  - [x] Backoff with jitter implementation
+- [x] `lib/eluent/sync/concerns/ledger_worktree.rb` — Worktree management concern
+- [x] `lib/eluent/sync/concerns/ledger_atom_operations.rb` — Atom operations concern
+- [x] `LedgerSyncerError` exception class
 
 ### Specs
 
-- [ ] `spec/eluent/sync/ledger_syncer_spec.rb`
+- [x] `spec/eluent/sync/ledger_syncer_spec.rb` (71 examples, 0 failures)
+
+### Implementation Notes
+
+- Extracted worktree and atom operations into separate concerns to keep class size manageable
+- `reconcile_offline_claims!` returns empty array as a placeholder until Phase 4 (LedgerSyncState) is implemented
+- Auto-recovery of stale worktrees is built into `claim_and_push` and `pull_ledger`
+- Backoff strategy uses exponential backoff with ±20% jitter to prevent thundering herd
 
 ---
 
@@ -238,14 +248,16 @@ Detect and recover from stale worktrees.
 
 ### Implementation
 
-- [ ] `lib/eluent/sync/ledger_syncer.rb` — Add recovery logic:
-  - [ ] Enhanced `#worktree_stale?` detection
-  - [ ] `#recover_stale_worktree!` implementation
-  - [ ] Auto-recovery in `#claim_and_push` and `#pull_ledger`
+- [x] `lib/eluent/sync/ledger_syncer.rb` — Add recovery logic:
+  - [x] Enhanced `#worktree_stale?` detection
+  - [x] `#recover_stale_worktree!` implementation
+  - [x] Auto-recovery in `#claim_and_push` and `#pull_ledger`
 
 ### Specs
 
-- [ ] `spec/eluent/sync/ledger_syncer_spec.rb` — Stale worktree recovery specs
+- [x] `spec/eluent/sync/ledger_syncer_spec.rb` — Stale worktree recovery specs
+
+**Note:** Basic stale worktree recovery was implemented as part of Phase 3.
 
 ---
 
@@ -281,4 +293,10 @@ Auto-release stale claims from crashed agents.
 
 ## Implementation Notes
 
-*To be filled in as implementation progresses.*
+### Phase 3 Notes
+
+- Used Ruby 3.2+ `Data.define` for immutable result types (`ClaimResult`, `SetupResult`, `SyncResult`)
+- Extracted concerns for worktree management and atom operations to keep the main class under 250 lines
+- The `claim_and_push` retry loop implements exponential backoff with jitter per the spec
+- Stale worktree detection checks: directory existence, .git file validity, and branch matching
+- File operations use `FileUtils.rm_f` for atomic deletion
