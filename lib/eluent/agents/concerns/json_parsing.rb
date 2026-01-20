@@ -16,7 +16,13 @@ module Eluent
           {}
         end
 
-        def closed_item?(content)
+        # Checks if a tool result JSON indicates work completion.
+        # The AI signals completion by using close_item, which returns JSON with a 'closed' key.
+        # This is part of the contract between the executor and AI: when the AI calls close_item,
+        # it signals that work on the current atom is complete.
+        # @param content [String] JSON string from a tool result
+        # @return [Boolean] true if the tool result indicates the item was closed
+        def tool_result_closes_item?(content)
           return false unless content
 
           parsed = parse_json(content)

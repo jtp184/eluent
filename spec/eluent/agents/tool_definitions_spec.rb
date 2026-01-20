@@ -5,7 +5,7 @@ RSpec.describe Eluent::Agents::ToolDefinitions do
     it 'defines expected tools' do
       expect(described_class::TOOLS.keys).to include(
         :list_items, :show_item, :create_item, :update_item,
-        :close_item, :ready_work, :add_dependency, :add_comment
+        :close_item, :list_ready_items, :add_dependency, :add_comment
       )
     end
 

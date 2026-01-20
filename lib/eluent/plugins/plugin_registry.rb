@@ -107,8 +107,11 @@ module Eluent
         commands.dup
       end
 
-      # Record that a plugin registered a hook
-      def record_hook(plugin_name, hook_name)
+      # Track that a plugin registered a hook (for metadata/introspection).
+      # This is separate from HooksManager#register which stores the actual callback.
+      # @param plugin_name [String] The plugin that registered the hook
+      # @param hook_name [Symbol] The hook that was registered
+      def track_hook(plugin_name, hook_name)
         return unless plugins.key?(plugin_name)
 
         plugins[plugin_name].hooks[hook_name] << Time.now.utc

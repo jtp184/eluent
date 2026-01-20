@@ -2,9 +2,15 @@
 
 module Eluent
   module Plugins
-    # DSL context for plugin registration blocks
+    # DSL context for plugin definition (registration-time).
     # Provides the API available inside `Eluent::Plugins.register "name" do ... end`
-    class PluginContext
+    #
+    # This context is used at plugin load time to register hooks, commands, and type extensions.
+    # It is distinct from HookContext, which is passed to callbacks at runtime when hooks fire.
+    # The naming reflects this temporal difference:
+    #   - PluginDefinitionContext: used once when plugin is defined/loaded
+    #   - HookContext: used each time a hook callback is invoked
+    class PluginDefinitionContext
       attr_reader :name
 
       def initialize(name:, hooks_manager:, registry:)
@@ -13,9 +19,14 @@ module Eluent
         @registry = registry
       end
 
-      # Generate hook registration methods for all lifecycle hooks
-      # Each method accepts a priority keyword and a block
-      Hooks::LIFECYCLE_HOOKS.each do |hook_name|
+      # Dynamically generates hook registration methods for all lifecycle hooks.
+      # This creates methods like #before_create, #after_create, #on_status_change, etc.
+      # Each generated method accepts a `priority:` keyword argument and a block.
+      #
+      # Example usage in a plugin:
+      #   before_create(priority: 50) { |ctx| validate_something(ctx) }
+      #   after_close { |ctx| notify_something(ctx) }
+      HooksManager::LIFECYCLE_HOOKS.each do |hook_name|
         define_method(hook_name) do |priority: 100, &block|
           register_hook(hook_name, priority: priority, &block)
         end
@@ -63,7 +74,7 @@ module Eluent
         raise InvalidPluginError.new('Hook handler required', plugin_name: name) unless block
 
         hooks_manager.register(hook_name, plugin_name: name, priority: priority, &block)
-        registry.record_hook(name, hook_name)
+        registry.track_hook(name, hook_name)
       end
     end
   end

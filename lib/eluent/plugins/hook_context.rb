@@ -22,8 +22,16 @@ module Eluent
         @halt_reason = nil
       end
 
-      # Abort the operation (only valid for before_* hooks)
-      # @param reason [String, nil] Reason for aborting
+      # Abort the operation (only valid for before_* hooks).
+      # This method both sets state AND raises an exception:
+      # 1. Sets @halted = true and @halt_reason before raising
+      # 2. Raises HookAbortError to immediately abort hook processing
+      #
+      # The state is set first so that if the error is caught and inspected,
+      # the context reflects the halted state. HooksManager catches the error
+      # and returns a HookResult.halted with the reason.
+      #
+      # @param reason [String, nil] Reason for aborting (shown to user/logged)
       # @raise [HookAbortError] Always raises to abort the operation
       def halt!(reason = nil)
         @halted = true

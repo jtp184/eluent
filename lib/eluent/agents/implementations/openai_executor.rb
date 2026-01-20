@@ -132,7 +132,7 @@ module Eluent
         end
 
         def item_closed?(tool_results)
-          tool_results.any? { |r| closed_item?(r[:content]) }
+          tool_results.any? { |r| tool_result_closes_item?(r[:content]) }
         end
 
         def build_success_result(atom)

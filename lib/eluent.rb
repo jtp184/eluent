@@ -74,10 +74,10 @@ require_relative 'eluent/compaction/restorer'
 
 # Plugins
 require_relative 'eluent/plugins/errors'
-require_relative 'eluent/plugins/hooks'
+require_relative 'eluent/plugins/hooks_manager'
 require_relative 'eluent/plugins/hook_context'
 require_relative 'eluent/plugins/plugin_registry'
-require_relative 'eluent/plugins/plugin_context'
+require_relative 'eluent/plugins/plugin_definition_context'
 require_relative 'eluent/plugins/gem_loader'
 require_relative 'eluent/plugins/plugin_manager'
 

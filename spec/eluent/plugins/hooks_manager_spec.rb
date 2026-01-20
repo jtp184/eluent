@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # rubocop:disable Lint/EmptyBlock -- Empty blocks are intentional test fixtures
-RSpec.describe Eluent::Plugins::Hooks do
+RSpec.describe Eluent::Plugins::HooksManager do
   let(:hooks) { described_class.new }
   let(:mock_context) { instance_double(Eluent::Plugins::HookContext) }
 
@@ -168,7 +168,7 @@ RSpec.describe Eluent::Plugins::Hooks do
     end
   end
 
-  describe Eluent::Plugins::Hooks::HookEntry do
+  describe Eluent::Plugins::HooksManager::HookEntry do
     it 'is sortable by priority' do
       low = described_class.new(plugin_name: 'low', priority: 50, callback: -> {})
       high = described_class.new(plugin_name: 'high', priority: 100, callback: -> {})
@@ -177,7 +177,7 @@ RSpec.describe Eluent::Plugins::Hooks do
     end
   end
 
-  describe Eluent::Plugins::Hooks::HookResult do
+  describe Eluent::Plugins::HooksManager::HookResult do
     describe '.success' do
       it 'creates a successful result' do
         result = described_class.success

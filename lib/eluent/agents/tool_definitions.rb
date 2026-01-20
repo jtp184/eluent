@@ -150,7 +150,7 @@ module Eluent
           }
         },
 
-        ready_work: {
+        list_ready_items: {
           description: 'Get list of ready (unblocked) work items',
           parameters: {
             type: 'object',

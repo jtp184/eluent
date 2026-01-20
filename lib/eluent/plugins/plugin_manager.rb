@@ -13,7 +13,7 @@ module Eluent
       attr_reader :hooks, :registry, :gem_loader
 
       def initialize
-        @hooks = Hooks.new
+        @hooks = HooksManager.new
         @registry = PluginRegistry.new
         @gem_loader = GemLoader.new
         @loaded = false
@@ -44,7 +44,7 @@ module Eluent
       # @param path [String, nil] File path the plugin was loaded from
       def register(name, path: nil, &block)
         info = registry.register(name, path: path)
-        context = PluginContext.new(name: name, hooks_manager: hooks, registry: registry)
+        context = PluginDefinitionContext.new(name: name, hooks_manager: hooks, registry: registry)
         context.instance_eval(&block) if block
         info
       rescue StandardError

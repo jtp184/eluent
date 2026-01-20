@@ -13,8 +13,26 @@ module Eluent
       end
     end
 
-    # Abstract base class for AI agent executors
-    # Subclasses implement API-specific communication
+    # Abstract base class for AI agent executors.
+    # Provides tool implementations and common infrastructure for working with atoms.
+    #
+    # == Tool Execution Contract
+    # Subclasses communicate with AI models and route tool calls through #execute_tool.
+    # The AI signals work completion by calling the close_item tool, which returns JSON
+    # containing a 'closed' key. Executors detect this via tool_result_closes_item?
+    # (from JsonParsing concern) to break out of their execution loop.
+    #
+    # == Implementing a New Executor
+    # Subclasses must implement #execute(atom, system_prompt:) which should:
+    # 1. Send the system prompt and initial message to the AI API
+    # 2. Loop: receive response, extract tool calls, execute tools via #execute_tool
+    # 3. Continue until no tool calls remain or close_item is called
+    # 4. Return an ExecutionResult (success or failure)
+    #
+    # == close_reason Flow
+    # When the AI calls close_item with a reason, the atom's close_reason field is set.
+    # After execution completes, ExecutionResult.success carries this close_reason
+    # so callers (like ExecutionLoop) can log or act on the completion summary.
     class AgentExecutor
       def initialize(repository:, configuration:)
         @repository = repository
@@ -125,7 +143,7 @@ module Eluent
         { closed: atom_summary(atom) }
       end
 
-      def tool_ready_work(sort: 'priority', type: nil, assignee: nil, limit: 10)
+      def tool_list_ready_items(sort: 'priority', type: nil, assignee: nil, limit: 10)
         indexer = repository.indexer
         blocking_resolver = Graph::BlockingResolver.new(indexer)
         calculator = Lifecycle::ReadinessCalculator.new(indexer: indexer, blocking_resolver: blocking_resolver)

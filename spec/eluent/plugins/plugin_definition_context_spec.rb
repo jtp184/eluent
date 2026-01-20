@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 # rubocop:disable Lint/EmptyBlock -- Empty blocks are intentional test fixtures
-RSpec.describe Eluent::Plugins::PluginContext do
-  let(:hooks_manager) { Eluent::Plugins::Hooks.new }
+RSpec.describe Eluent::Plugins::PluginDefinitionContext do
+  let(:hooks_manager) { Eluent::Plugins::HooksManager.new }
   let(:registry) { Eluent::Plugins::PluginRegistry.new }
   let(:context) do
     registry.register('test-plugin')

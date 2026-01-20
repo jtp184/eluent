@@ -144,17 +144,17 @@ RSpec.describe Eluent::Plugins::PluginRegistry do
     end
   end
 
-  describe '#record_hook' do
+  describe '#track_hook' do
     it 'records hook registration' do
       registry.register('test-plugin')
-      registry.record_hook('test-plugin', :before_create)
+      registry.track_hook('test-plugin', :before_create)
 
       info = registry['test-plugin']
       expect(info.hooks[:before_create].size).to eq(1)
     end
 
     it 'ignores unknown plugins' do
-      expect { registry.record_hook('unknown', :before_create) }.not_to raise_error
+      expect { registry.track_hook('unknown', :before_create) }.not_to raise_error
     end
   end
 

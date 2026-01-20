@@ -2,9 +2,13 @@
 
 module Eluent
   module Plugins
-    # Hook management for lifecycle events
-    # Hooks are callbacks registered by plugins, invoked at specific lifecycle points
-    class Hooks
+    # Manages lifecycle hook registration and invocation for the plugin system.
+    # Hooks are callbacks registered by plugins that fire at specific lifecycle points
+    # (e.g., before/after create, close, update operations).
+    #
+    # Distinct from PluginRegistry which tracks plugin metadata - this class
+    # manages the actual hook callbacks and their execution.
+    class HooksManager
       LIFECYCLE_HOOKS = %i[
         before_create after_create
         before_close after_close
@@ -19,7 +23,12 @@ module Eluent
         end
       end
 
-      # Result of invoking hooks
+      # Result of invoking hooks. Has three distinct states:
+      # - Success: All hooks completed normally (success=true, halted=false)
+      # - Halted: A plugin intentionally stopped the operation via halt! (success=false, halted=true)
+      #           This is not an error - it's a deliberate decision by the plugin (e.g., validation failure)
+      # - Failed: A hook raised an unexpected exception (success=false, halted=false)
+      #           This indicates a bug in the plugin, not an intentional abort
       HookResult = Data.define(:success, :halted, :reason, :plugin) do
         def self.success
           new(success: true, halted: false, reason: nil, plugin: nil)
@@ -41,7 +50,9 @@ module Eluent
       # Register a hook callback
       # @param name [Symbol] Hook name from LIFECYCLE_HOOKS
       # @param plugin_name [String] Name of the registering plugin
-      # @param priority [Integer] Lower runs first (default 100)
+      # @param priority [Integer] Execution order (lower = earlier). Defaults to 100.
+      #   Priority scale: 0 = first, 100 = default, higher values run later.
+      #   Example: priority 50 runs before default, priority 200 runs after.
       # @param callback [Proc] Block to call when hook fires
       def register(name, plugin_name:, priority: 100, &callback)
         validate_hook_name!(name)
