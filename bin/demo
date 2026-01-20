@@ -437,11 +437,11 @@ step 'Show sprint-planning formula details'
 el 'formula show sprint-planning'
 
 step 'Instantiate sprint-planning formula with variables'
-output = el "formula instantiate sprint-planning --var feature=OAuth --var assignee=bob --var sprint=Q1",
+output = el 'formula instantiate sprint-planning --var feature=OAuth --var assignee=bob --var sprint=Q1',
             capture: true
 # Capture the epic ID from the output for later use in distill
-oauth_epic_id = output[/root_atom_id['":\s]+([^'",\s}]+)/, 1] ||
-                output[/Created (\d+) items/, 1] && 'OAuth' # fallback
+output[/root_atom_id['":\s]+([^'",\s}]+)/, 1] ||
+  (output[/Created (\d+) items/, 1] && 'OAuth') # fallback
 puts '  -> Created items from template'
 
 step 'List items to see the created hierarchy'
@@ -499,8 +499,8 @@ section '16. COMPACTION (Archive Old Items)'
 
 step 'Create an old closed item for compaction demo'
 # Create a new task and close it, then backdate it
-output = el "create -t 'Legacy cleanup task' -d 'This was an old task with a #{'detailed ' * 50}description that should be compacted.' --type task",
-            capture: true
+desc = "This was an old task with a #{'detailed ' * 50}description that should be compacted."
+output = el "create -t 'Legacy cleanup task' -d '#{desc}' --type task", capture: true
 old_task_id = output[/Created \w+ (\w+):/, 1]
 puts "  -> Created task: #{old_task_id}"
 
@@ -512,19 +512,23 @@ old_time = (Time.now - (45 * 24 * 60 * 60)).utc.iso8601
 data_file = DEMO_DIR / '.eluent' / 'data.jsonl'
 content = File.read(data_file)
 lines = content.lines.map do |line|
-  data = JSON.parse(line, symbolize_names: true) rescue nil
+  data = begin
+    JSON.parse(line, symbolize_names: true)
+  rescue StandardError
+    nil
+  end
   if data && data[:_type] == 'atom' && data[:title] == 'Legacy cleanup task'
     # Backdate the closed task to simulate an old item
     data[:closed_at] = old_time
     data[:updated_at] = old_time
     data[:created_at] = old_time
-    JSON.generate(data) + "\n"
+    "#{JSON.generate(data)}\n"
   else
     line
   end
 end
 File.write(data_file, lines.join)
-puts "  -> Backdated closed task to 45 days ago"
+puts '  -> Backdated closed task to 45 days ago'
 
 step 'Preview tier 1 compaction (items > 30 days old)'
 el 'compact run --tier 1 --preview'

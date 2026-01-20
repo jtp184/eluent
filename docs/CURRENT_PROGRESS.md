@@ -1,6 +1,6 @@
 # Eluent Implementation Progress
 
-**Last Updated**: 2026-01-19
+**Last Updated**: 2026-01-19 (Phase 4 complete)
 
 This document tracks progress towards completing the implementation plan defined in `IMPLEMENTATION_PLAN.md`.
 
@@ -13,11 +13,11 @@ This document tracks progress towards completing the implementation plan defined
 | Phase 1: Foundation | Complete | 100% |
 | Phase 2: Graph Operations | Complete | 100% |
 | Phase 3: Sync and Daemon | Complete | 100% |
-| Phase 4: Formulas and Compaction | Not Started | 0% |
+| Phase 4: Formulas and Compaction | Complete | 100% |
 | Phase 5: Extensions and AI | Not Started | 0% |
-| Phase 6: Polish | In Progress | 70% |
+| Phase 6: Polish | In Progress | 75% |
 
-**Current State**: Production-ready with git sync, daemon support, 14 CLI commands, and 873 test examples.
+**Current State**: Production-ready with git sync, daemon support, formulas, compaction, 16 CLI commands, and 1087 test examples.
 
 ---
 
@@ -115,7 +115,7 @@ Dependencies, blocking, ready work
 ### Integration
 
 - [x] `lib/eluent/storage/jsonl_repository.rb` — delete_atom method for permanent removal
-- [x] `lib/eluent/cli/application.rb` — 14 commands registered, exit codes (0-5)
+- [x] `lib/eluent/cli/application.rb` — 16 commands registered, exit codes (0-8)
 - [x] `lib/eluent.rb` — Requires for graph and lifecycle modules
 
 ### Specs
@@ -178,25 +178,40 @@ Templates and compaction
 
 ### Models
 
-- [ ] `lib/eluent/models/formula.rb` — Template definition
+- [x] `lib/eluent/models/formula.rb` — Template definition with validation, step management, and composition support
 
 ### Formulas
 
-- [ ] `lib/eluent/formulas/parser.rb` — YAML formula parsing
-- [ ] `lib/eluent/formulas/variable_resolver.rb` — Variable substitution ({{var}} syntax)
-- [ ] `lib/eluent/formulas/instantiator.rb` — Create items from template
-- [ ] `lib/eluent/formulas/distiller.rb` — Extract template from work
-- [ ] `lib/eluent/formulas/composer.rb` — Combine formulas (sequential/parallel/conditional)
+- [x] `lib/eluent/formulas/parser.rb` — YAML formula parsing with schema validation and inheritance
+- [x] `lib/eluent/formulas/variable_resolver.rb` — Variable substitution ({{var}} syntax) with defaults and conditionals
+- [x] `lib/eluent/formulas/instantiator.rb` — Create items from template with dependency wiring
+- [x] `lib/eluent/formulas/distiller.rb` — Extract template from completed work
+- [x] `lib/eluent/formulas/composer.rb` — Combine formulas (sequential/parallel/conditional)
 
 ### Compaction
 
-- [ ] `lib/eluent/compaction/compactor.rb` — Tier 1/2 compaction
-- [ ] `lib/eluent/compaction/summarizer.rb` — Summarize content for compaction
-- [ ] `lib/eluent/compaction/restorer.rb` — Restore original content from git history
+- [x] `lib/eluent/compaction/compactor.rb` — Tier 1/2 compaction with configurable thresholds
+- [x] `lib/eluent/compaction/summarizer.rb` — Summarize content for compaction
+- [x] `lib/eluent/compaction/restorer.rb` — Restore original content from git history
 
 ### CLI Commands (Phase 4)
 
-- [ ] `lib/eluent/cli/commands/formula.rb` — Formula commands (list/show/instantiate/distill/compose/attach)
+- [x] `lib/eluent/cli/commands/formula.rb` — Formula commands (list/show/instantiate/distill/compose/attach)
+- [x] `lib/eluent/cli/commands/compact.rb` — Compaction commands (run/status/restore)
+
+### Specs
+
+- [x] `spec/eluent/models/formula_spec.rb` — Formula model validation and behavior
+- [x] `spec/eluent/formulas/parser_spec.rb` — YAML parsing and schema validation
+- [x] `spec/eluent/formulas/variable_resolver_spec.rb` — Variable substitution
+- [x] `spec/eluent/formulas/instantiator_spec.rb` — Template instantiation
+- [x] `spec/eluent/formulas/distiller_spec.rb` — Template extraction
+- [x] `spec/eluent/formulas/composer_spec.rb` — Formula composition
+- [x] `spec/eluent/compaction/compactor_spec.rb` — Compaction tiers
+- [x] `spec/eluent/compaction/summarizer_spec.rb` — Content summarization
+- [x] `spec/eluent/compaction/restorer_spec.rb` — History restoration
+- [x] `spec/eluent/cli/commands/formula_spec.rb` — Formula CLI commands
+- [x] `spec/eluent/cli/commands/compact_spec.rb` — Compact CLI commands
 
 ---
 
@@ -240,7 +255,7 @@ Tests, types, documentation
 - [x] Daemon concurrent access tests
 - [x] Sync 3-way merge scenario tests
 
-**Total: 873 examples passing**
+**Total: 1087 examples passing**
 
 ### Type Checking
 
