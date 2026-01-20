@@ -98,7 +98,6 @@ Dependencies, blocking, ready work
 
 ### Lifecycle
 
-- [x] `lib/eluent/lifecycle/transition.rb` — Status state machine with configurable allowed transitions
 - [x] `lib/eluent/lifecycle/readiness_calculator.rb` — Ready work query with:
   - Sort policies: priority (default), oldest, hybrid (48h threshold)
   - Abstract type exclusion (epic, formula)
@@ -115,7 +114,7 @@ Dependencies, blocking, ready work
 ### Integration
 
 - [x] `lib/eluent/storage/jsonl_repository.rb` — delete_atom method for permanent removal
-- [x] `lib/eluent/cli/application.rb` — 16 commands registered, exit codes (0-8)
+- [x] `lib/eluent/cli/application.rb` — 17 commands registered, exit codes (0-10)
 - [x] `lib/eluent.rb` — Requires for graph and lifecycle modules
 
 ### Specs
@@ -304,13 +303,19 @@ Tests, types, documentation
 - Created with `el create --ephemeral`
 - Converted to persistent with `el update ID --persist`
 - Pruned with `el discard prune --ephemeral`
-- Auto-cleanup timer deferred to daemon implementation (Phase 3)
+- Auto-cleanup implemented in daemon (runs every 60 seconds)
 
 ### ID System
 - ULID format: 26 chars (10 timestamp + 16 randomness)
 - Shortening matches against randomness portion only
 - Minimum 4-char prefix required for lookup
 - Confusable character normalization: I,L→1, O→0
+
+### Status Transitions
+- Status transition logic is built into `lib/eluent/models/status.rb`
+- Uses `can_transition_to?` and `can_transition_from?` methods
+- Transitions are configurable via the ExtendableCollection mixin
+- Plugins can register custom statuses with allowed transition rules
 
 ### Blocking Semantics
 - All 4 blocking types implemented with transitive resolution
