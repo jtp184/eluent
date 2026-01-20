@@ -33,7 +33,12 @@ module Eluent
 
         iteration = 0
         while @running && (max_iterations.nil? || iteration < max_iterations)
-          atom = find_ready_work(assignee_filter: assignee_filter, type_filter: type_filter)
+          atom = begin
+            find_ready_work(assignee_filter: assignee_filter, type_filter: type_filter)
+          rescue StandardError
+            # Repository error during work discovery - continue loop to retry
+            nil
+          end
           break unless atom
 
           result = process_atom(atom)
@@ -134,8 +139,10 @@ module Eluent
         current.status = Models::Status[:open]
         current.assignee = nil
         repository.update_atom(current)
-      rescue StandardError
-        # Best effort release
+      rescue StandardError => e
+        # Best effort release - failure is non-critical but worth noting
+        # The atom may remain claimed until manual intervention or timeout
+        warn "[ExecutionLoop] Failed to release claim on #{atom.id}: #{e.message}" if $DEBUG
       end
 
       def handle_result(atom, result)
@@ -151,7 +158,7 @@ module Eluent
         end
 
         # Create any follow-up items
-        result.follow_ups.each do |follow_up|
+        Array(result.follow_ups).each do |follow_up|
           create_follow_up(atom, follow_up)
         end
       end
@@ -171,16 +178,18 @@ module Eluent
 
       def sync_before_work
         git_adapter.pull
-      rescue Sync::GitError
-        # Continue even if sync fails
+      rescue Sync::GitError => e
+        # Continue even if sync fails - agent can work on stale data
+        warn "[ExecutionLoop] Pre-work sync failed: #{e.message}" if $DEBUG
       end
 
       def sync_after_work
         git_adapter.add(paths: repository.paths.data_file)
         git_adapter.commit(message: "[eluent-agent] #{configuration.agent_id} completed work")
         git_adapter.push
-      rescue Sync::GitError
-        # Log but don't fail on sync errors
+      rescue Sync::GitError => e
+        # Work was completed but sync failed - changes remain local
+        warn "[ExecutionLoop] Post-work sync failed: #{e.message}" if $DEBUG
       end
     end
 

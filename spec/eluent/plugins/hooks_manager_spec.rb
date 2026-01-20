@@ -51,6 +51,24 @@ RSpec.describe Eluent::Plugins::HooksManager do
       expect(entry.plugin_name).to eq('test')
       expect(entry.priority).to eq(50)
     end
+
+    it 'raises error for nil priority' do
+      expect do
+        hooks.register(:before_create, plugin_name: 'test', priority: nil) { |_ctx| }
+      end.to raise_error(Eluent::Plugins::InvalidPluginError, /Integer/)
+    end
+
+    it 'raises error for string priority' do
+      expect do
+        hooks.register(:before_create, plugin_name: 'test', priority: '100') { |_ctx| }
+      end.to raise_error(Eluent::Plugins::InvalidPluginError, /Integer/)
+    end
+
+    it 'raises error for float priority' do
+      expect do
+        hooks.register(:before_create, plugin_name: 'test', priority: 100.5) { |_ctx| }
+      end.to raise_error(Eluent::Plugins::InvalidPluginError, /Integer/)
+    end
   end
 
   describe '#unregister' do

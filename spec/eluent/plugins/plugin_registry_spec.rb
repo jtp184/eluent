@@ -20,6 +20,24 @@ RSpec.describe Eluent::Plugins::PluginRegistry do
         registry.register('test-plugin')
       end.to raise_error(Eluent::Plugins::InvalidPluginError, /already registered/)
     end
+
+    it 'raises error for nil plugin name' do
+      expect do
+        registry.register(nil)
+      end.to raise_error(Eluent::Plugins::InvalidPluginError, /non-empty string/)
+    end
+
+    it 'raises error for empty plugin name' do
+      expect do
+        registry.register('')
+      end.to raise_error(Eluent::Plugins::InvalidPluginError, /non-empty string/)
+    end
+
+    it 'raises error for whitespace-only plugin name' do
+      expect do
+        registry.register('   ')
+      end.to raise_error(Eluent::Plugins::InvalidPluginError, /non-empty string/)
+    end
   end
 
   describe '#unregister' do
@@ -123,6 +141,18 @@ RSpec.describe Eluent::Plugins::PluginRegistry do
 
       info = registry['test-plugin']
       expect(info.command_names).to include('custom')
+    end
+
+    it 'raises error for nil command name' do
+      expect do
+        registry.register_command(nil, plugin_name: 'test-plugin') { |_| }
+      end.to raise_error(Eluent::Plugins::InvalidPluginError, /non-empty string/)
+    end
+
+    it 'raises error for empty command name' do
+      expect do
+        registry.register_command('', plugin_name: 'test-plugin') { |_| }
+      end.to raise_error(Eluent::Plugins::InvalidPluginError, /non-empty string/)
     end
   end
 

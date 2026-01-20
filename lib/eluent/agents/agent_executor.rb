@@ -54,11 +54,14 @@ module Eluent
       # @param arguments [Hash] Arguments for the tool
       # @return [Hash] Tool result
       def execute_tool(tool_name, arguments)
+        return { error: 'Tool name must be a non-empty string' } unless valid_tool_name?(tool_name)
+        return { error: 'Arguments must be a Hash or nil' } unless arguments.nil? || arguments.is_a?(Hash)
+
         method_name = "tool_#{tool_name}"
 
         return { error: "Unknown tool: #{tool_name}" } unless respond_to?(method_name, true)
 
-        send(method_name, **symbolize_keys(arguments))
+        send(method_name, **symbolize_keys(arguments || {}))
       rescue StandardError => e
         { error: e.message }
       end
@@ -98,7 +101,13 @@ module Eluent
         }
       end
 
+      VALID_PRIORITY_RANGE = (0..4)
+      ALLOWED_UPDATE_FIELDS = %i[status priority title description assignee labels].freeze
+
       def tool_create_item(title:, description: nil, type: 'task', priority: 2, assignee: nil, labels: nil)
+        return { error: 'Title is required' } if title.nil? || title.to_s.strip.empty?
+        return { error: 'Priority must be between 0 and 4' } unless VALID_PRIORITY_RANGE.cover?(priority)
+
         atom = repository.create_atom(
           title: title,
           description: description,
@@ -115,7 +124,13 @@ module Eluent
         atom = repository.find_atom(id)
         return { error: "Item not found: #{id}" } unless atom
 
-        updates.each do |field, value|
+        # Validate priority if being updated
+        if updates.key?(:priority) && !VALID_PRIORITY_RANGE.cover?(updates[:priority])
+          return { error: 'Priority must be between 0 and 4' }
+        end
+
+        # Only process allowed fields
+        updates.slice(*ALLOWED_UPDATE_FIELDS).each do |field, value|
           case field
           when :status
             atom.status = Models::Status[value.to_sym]
@@ -143,7 +158,12 @@ module Eluent
         { closed: atom_summary(atom) }
       end
 
+      MAX_LIST_LIMIT = 50
+
       def tool_list_ready_items(sort: 'priority', type: nil, assignee: nil, limit: 10)
+        # Enforce documented maximum limit
+        effective_limit = [limit.to_i.clamp(1, MAX_LIST_LIMIT), MAX_LIST_LIMIT].min
+
         indexer = repository.indexer
         blocking_resolver = Graph::BlockingResolver.new(indexer)
         calculator = Lifecycle::ReadinessCalculator.new(indexer: indexer, blocking_resolver: blocking_resolver)
@@ -152,7 +172,7 @@ module Eluent
           sort: sort.to_sym,
           type: type&.to_sym,
           assignee: assignee
-        ).first(limit)
+        ).first(effective_limit)
 
         {
           count: items.size,
@@ -205,6 +225,10 @@ module Eluent
 
       def symbolize_keys(hash)
         hash.transform_keys(&:to_sym)
+      end
+
+      def valid_tool_name?(tool_name)
+        tool_name.is_a?(String) && !tool_name.strip.empty?
       end
 
       def default_system_prompt(atom)

@@ -60,4 +60,40 @@ RSpec.describe Eluent::Plugins::GemLoader do
       expect(gem_info.path).to eq('eluent/plugin')
     end
   end
+
+  describe described_class::LoadResult do
+    it 'reports success when no errors' do
+      result = described_class.new(loaded: [], errors: [])
+
+      expect(result.success?).to be true
+    end
+
+    it 'reports failure when errors present' do
+      error = Eluent::Plugins::PluginLoadError.new('test error')
+      result = described_class.new(loaded: [], errors: [error])
+
+      expect(result.success?).to be false
+    end
+
+    it 'contains loaded gems and errors' do
+      loaded = [Eluent::Plugins::GemLoader::LoadedGem.new(name: 'test', version: '1.0', path: 'test')]
+      error = Eluent::Plugins::PluginLoadError.new('error')
+      result = described_class.new(loaded: loaded, errors: [error])
+
+      expect(result.loaded.size).to eq(1)
+      expect(result.errors.size).to eq(1)
+    end
+  end
+
+  describe '#load_all!' do
+    it 'returns a LoadResult' do
+      allow(loader).to receive(:discover).and_return([])
+
+      result = loader.load_all!
+
+      expect(result).to be_a(described_class::LoadResult)
+      expect(result.loaded).to eq([])
+      expect(result.errors).to eq([])
+    end
+  end
 end

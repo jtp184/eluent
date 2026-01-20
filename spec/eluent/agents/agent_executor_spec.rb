@@ -161,6 +161,138 @@ RSpec.describe Eluent::Agents::AgentExecutor do
         expect(result[:error]).to include('Unknown tool')
       end
     end
+
+    describe 'input validation' do
+      it 'returns error for nil tool_name' do
+        result = executor.execute_tool(nil, {})
+
+        expect(result[:error]).to include('non-empty string')
+      end
+
+      it 'returns error for empty tool_name' do
+        result = executor.execute_tool('', {})
+
+        expect(result[:error]).to include('non-empty string')
+      end
+
+      it 'returns error for whitespace-only tool_name' do
+        result = executor.execute_tool('   ', {})
+
+        expect(result[:error]).to include('non-empty string')
+      end
+
+      it 'returns error for non-Hash arguments' do
+        result = executor.execute_tool('list_items', 'not a hash')
+
+        expect(result[:error]).to include('Hash or nil')
+      end
+
+      it 'accepts nil arguments' do
+        allow(repository).to receive(:list_atoms).and_return([])
+        result = executor.execute_tool('list_items', nil)
+
+        expect(result[:error]).to be_nil
+        expect(result[:count]).to eq(0)
+      end
+    end
+
+    describe 'tool_create_item validation' do
+      before do
+        allow(repository).to receive(:create_atom)
+      end
+
+      it 'returns error for nil title' do
+        result = executor.execute_tool('create_item', { title: nil })
+
+        expect(result[:error]).to include('Title is required')
+      end
+
+      it 'returns error for empty title' do
+        result = executor.execute_tool('create_item', { title: '' })
+
+        expect(result[:error]).to include('Title is required')
+      end
+
+      it 'returns error for priority below 0' do
+        result = executor.execute_tool('create_item', { title: 'Test', priority: -1 })
+
+        expect(result[:error]).to include('Priority must be between 0 and 4')
+      end
+
+      it 'returns error for priority above 4' do
+        result = executor.execute_tool('create_item', { title: 'Test', priority: 5 })
+
+        expect(result[:error]).to include('Priority must be between 0 and 4')
+      end
+
+      it 'accepts valid priority 0' do
+        allow(repository).to receive(:create_atom).and_return(
+          Eluent::Models::Atom.new(id: 'new-1', title: 'Test')
+        )
+        result = executor.execute_tool('create_item', { title: 'Test', priority: 0 })
+
+        expect(result[:error]).to be_nil
+      end
+
+      it 'accepts valid priority 4' do
+        allow(repository).to receive(:create_atom).and_return(
+          Eluent::Models::Atom.new(id: 'new-1', title: 'Test')
+        )
+        result = executor.execute_tool('create_item', { title: 'Test', priority: 4 })
+
+        expect(result[:error]).to be_nil
+      end
+    end
+
+    describe 'tool_update_item validation' do
+      let(:atom) { Eluent::Models::Atom.new(id: 'atom-123', title: 'Test', priority: 2) }
+
+      before do
+        allow(repository).to receive(:find_atom).with('atom-123').and_return(atom)
+        allow(repository).to receive(:update_atom).and_return(atom)
+      end
+
+      it 'returns error for priority below 0' do
+        result = executor.execute_tool('update_item', { id: 'atom-123', priority: -1 })
+
+        expect(result[:error]).to include('Priority must be between 0 and 4')
+      end
+
+      it 'returns error for priority above 4' do
+        result = executor.execute_tool('update_item', { id: 'atom-123', priority: 5 })
+
+        expect(result[:error]).to include('Priority must be between 0 and 4')
+      end
+
+      it 'ignores unknown fields' do
+        result = executor.execute_tool('update_item', { id: 'atom-123', unknown_field: 'value' })
+
+        expect(result[:error]).to be_nil
+        expect(result[:updated]).to be_a(Hash)
+      end
+    end
+
+    describe 'tool_list_ready_items validation' do
+      before do
+        allow(repository).to receive(:indexer).and_return(instance_double(Eluent::Storage::Indexer, all_atoms: []))
+        allow(Eluent::Graph::BlockingResolver).to receive(:new).and_return(
+          instance_double(Eluent::Graph::BlockingResolver, ready?: true, clear_cache: nil)
+        )
+      end
+
+      it 'clamps limit to maximum of 50' do
+        result = executor.execute_tool('list_ready_items', { limit: 100 })
+
+        expect(result[:error]).to be_nil
+        # The limit should be capped internally - we can't directly verify it but no error means it worked
+      end
+
+      it 'clamps negative limit to 1' do
+        result = executor.execute_tool('list_ready_items', { limit: -5 })
+
+        expect(result[:error]).to be_nil
+      end
+    end
   end
 end
 

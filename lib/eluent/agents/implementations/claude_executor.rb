@@ -82,7 +82,7 @@ module Eluent
         end
 
         def parse_response(response)
-          body = parse_json(response.body.to_s)
+          body = parse_json(response.body&.to_s || '{}')
           body['content'] || []
         end
 
@@ -110,6 +110,9 @@ module Eluent
 
         def build_success_result(atom)
           refreshed_atom = repository.find_atom(atom.id)
+          # Handle case where atom was deleted during execution
+          return ExecutionResult.failure(error: 'Atom was deleted during execution', atom: atom) unless refreshed_atom
+
           ExecutionResult.success(atom: refreshed_atom, close_reason: refreshed_atom.close_reason)
         end
       end

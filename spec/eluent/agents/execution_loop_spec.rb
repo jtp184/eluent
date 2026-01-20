@@ -49,6 +49,19 @@ RSpec.describe Eluent::Agents::ExecutionLoop do
       end
     end
 
+    context 'when find_ready_work raises an exception' do
+      before do
+        allow(repository).to receive(:indexer).and_raise(StandardError, 'Repository error')
+      end
+
+      it 'catches the exception and returns with zero iterations' do
+        result = loop.run(max_iterations: 10)
+
+        expect(result.iterations).to eq(0)
+        expect(result.processed).to eq(0)
+      end
+    end
+
     context 'with ready work' do
       let(:atom) { Eluent::Models::Atom.new(id: 'atom-1', title: 'Task 1') }
       let(:success_result) { Eluent::Agents::ExecutionResult.success(atom: atom) }

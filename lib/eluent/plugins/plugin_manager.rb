@@ -161,11 +161,14 @@ module Eluent
     end
 
     # Module-level singleton and DSL
+    # Thread-safe mutex for singleton access
+    MANAGER_MUTEX = Mutex.new
+    private_constant :MANAGER_MUTEX
+
     class << self
       # Get or create the global plugin manager (thread-safe)
       def manager
-        @manager_mutex ||= Mutex.new
-        @manager_mutex.synchronize { @manager ||= PluginManager.new }
+        MANAGER_MUTEX.synchronize { @manager ||= PluginManager.new }
       end
 
       # Register a plugin using the module-level DSL
@@ -180,8 +183,7 @@ module Eluent
 
       # Reset the global manager (for testing)
       def reset!
-        @manager_mutex ||= Mutex.new
-        @manager_mutex.synchronize do
+        MANAGER_MUTEX.synchronize do
           @manager&.reset!
           @manager = nil
         end

@@ -26,6 +26,7 @@ module Eluent
       # @param path [String, nil] File path the plugin was loaded from
       # @return [PluginInfo] The registered plugin info
       def register(name, path: nil)
+        validate_name!(name, 'Plugin')
         raise InvalidPluginError.new("Plugin already registered: #{name}", plugin_name: name) if plugins.key?(name)
 
         info = PluginInfo.new(
@@ -81,6 +82,7 @@ module Eluent
       # @param handler [Proc] Command handler
       # @param description [String] Command description
       def register_command(command_name, plugin_name:, description: nil, &handler)
+        validate_name!(command_name, 'Command')
         raise InvalidPluginError, "Unknown plugin: #{plugin_name}" unless plugins.key?(plugin_name)
 
         if commands.key?(command_name)
@@ -133,6 +135,12 @@ module Eluent
       private
 
       attr_reader :plugins, :commands
+
+      def validate_name!(name, kind)
+        return if name.is_a?(String) && !name.strip.empty?
+
+        raise InvalidPluginError, "#{kind} name must be a non-empty string"
+      end
     end
   end
 end

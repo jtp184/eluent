@@ -56,6 +56,7 @@ module Eluent
       # @param callback [Proc] Block to call when hook fires
       def register(name, plugin_name:, priority: 100, &callback)
         validate_hook_name!(name)
+        validate_priority!(priority)
         raise InvalidPluginError, 'Callback required' unless callback
 
         entry = HookEntry.new(
@@ -78,6 +79,15 @@ module Eluent
       end
 
       # Invoke all callbacks for a hook
+      #
+      # == Error Isolation Behavior
+      # When a plugin raises an exception (either HookAbortError or StandardError),
+      # hook execution stops immediately and no subsequent plugins are invoked.
+      # This is intentional: if one plugin's hook fails, continuing to execute
+      # remaining hooks could lead to cascading bad state (e.g., a validation
+      # plugin fails but a modification plugin still runs). Callers should check
+      # the HookResult to determine if the operation should proceed.
+      #
       # @param name [Symbol] Hook name
       # @param context [HookContext] Context passed to callbacks
       # @return [HookResult] Result of invocation
@@ -131,6 +141,12 @@ module Eluent
         return if LIFECYCLE_HOOKS.include?(name)
 
         raise ArgumentError, "Unknown hook: #{name}. Valid hooks: #{LIFECYCLE_HOOKS.join(', ')}"
+      end
+
+      def validate_priority!(priority)
+        return if priority.is_a?(Integer)
+
+        raise InvalidPluginError, "Priority must be an Integer, got #{priority.class}"
       end
     end
   end

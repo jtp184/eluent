@@ -75,7 +75,13 @@ module Eluent
       private
 
       def generate_agent_id
-        hostname = Socket.gethostname.split('.').first
+        hostname = begin
+          name = Socket.gethostname
+          name&.split('.')&.first
+        rescue SocketError
+          nil
+        end
+        hostname = 'unknown' if hostname.nil? || hostname.empty?
         "agent-#{hostname}-#{Process.pid}"
       end
     end

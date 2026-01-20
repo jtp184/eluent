@@ -9,9 +9,15 @@ module Eluent
       PLUGIN_ENTRY_FILE = 'eluent/plugin'
 
       LoadedGem = Data.define(:name, :version, :path)
+      LoadResult = Data.define(:loaded, :errors) do
+        def success?
+          errors.empty?
+        end
+      end
 
       def initialize
         @loaded_gems = []
+        @load_errors = []
       end
 
       # Find all eluent-* gems available in the current environment
@@ -21,9 +27,19 @@ module Eluent
       end
 
       # Load all discovered plugin gems
-      # @return [Array<LoadedGem>] Successfully loaded gems
+      # Continues loading even if some gems fail, collecting all errors
+      # @return [LoadResult] Result containing loaded gems and any errors
       def load_all!
-        discover.filter_map { |spec| load_gem(spec) }
+        errors = []
+        loaded = discover.filter_map do |spec|
+          load_gem(spec)
+        rescue PluginLoadError => e
+          errors << e
+          warn "[GemLoader] Failed to load #{spec.name}: #{e.message}" if $DEBUG
+          nil
+        end
+
+        LoadResult.new(loaded: loaded, errors: errors)
       end
 
       # Load a specific gem by name
@@ -44,10 +60,13 @@ module Eluent
 
       private
 
-      attr_reader :loaded_gems
+      attr_reader :loaded_gems, :load_errors
 
       def load_gem(spec)
-        return nil if already_loaded?(spec)
+        if already_loaded?(spec)
+          warn "[GemLoader] Skipping already loaded gem: #{spec.name} v#{spec.version}" if $DEBUG
+          return nil
+        end
 
         entry_file = find_entry_file(spec)
         return nil unless entry_file
@@ -70,8 +89,10 @@ module Eluent
         )
       end
 
+      # Check if gem is already loaded with the same version
+      # A different version means the gem was updated and should be reloaded
       def already_loaded?(spec)
-        loaded_gems.any? { |g| g.name == spec.name }
+        loaded_gems.any? { |g| g.name == spec.name && g.version == spec.version.to_s }
       end
 
       def find_entry_file(spec)

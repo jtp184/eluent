@@ -147,6 +147,44 @@ RSpec.describe Eluent::Agents::Implementations::ClaudeExecutor do
         expect(result.close_reason).to eq('Completed')
       end
     end
+
+    context 'with nil response body' do
+      before do
+        response = instance_double(HTTPX::Response)
+        allow(response).to receive_messages(status: 200, body: nil)
+
+        httpx_chain = double('HTTPX chain')
+        allow(HTTPX).to receive(:with).and_return(httpx_chain)
+        allow(httpx_chain).to receive_messages(with: httpx_chain, post: response)
+
+        allow(repository).to receive(:find_atom).with('test-123').and_return(atom)
+      end
+
+      it 'handles nil body gracefully' do
+        result = executor.execute(atom)
+
+        # Should succeed without throwing an error
+        expect(result.success).to be true
+      end
+    end
+
+    context 'when atom is deleted during execution' do
+      before do
+        stub_httpx_request(
+          status: 200,
+          body: { content: [{ type: 'text', text: 'Done' }] }
+        )
+        # Return nil on second find_atom call (after execution)
+        allow(repository).to receive(:find_atom).with('test-123').and_return(nil)
+      end
+
+      it 'returns failure result' do
+        result = executor.execute(atom)
+
+        expect(result.success).to be false
+        expect(result.error).to include('deleted during execution')
+      end
+    end
   end
 
   describe 'constants' do

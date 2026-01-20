@@ -166,6 +166,19 @@ RSpec.describe Eluent::Plugins do
 
       expect(manager1).to be(manager2)
     end
+
+    it 'is thread-safe for concurrent access' do
+      described_class.reset!
+      managers = []
+
+      threads = 10.times.map do
+        Thread.new { managers << described_class.manager }
+      end
+      threads.each(&:join)
+
+      # All threads should have received the same instance
+      expect(managers.uniq.size).to eq(1)
+    end
   end
 
   describe '.register' do
