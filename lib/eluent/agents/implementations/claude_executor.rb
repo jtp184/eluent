@@ -107,14 +107,6 @@ module Eluent
         def item_closed?(tool_results)
           tool_results.any? { |r| r[:type] == 'tool_result' && tool_result_closes_item?(r[:content]) }
         end
-
-        def build_success_result(atom)
-          refreshed_atom = repository.find_atom(atom.id)
-          # Handle case where atom was deleted during execution
-          return ExecutionResult.failure(error: 'Atom was deleted during execution', atom: atom) unless refreshed_atom
-
-          ExecutionResult.success(atom: refreshed_atom, close_reason: refreshed_atom.close_reason)
-        end
       end
     end
   end

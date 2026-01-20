@@ -49,6 +49,17 @@ module Eluent
 
       protected
 
+      # Build success result, refreshing atom from repository to capture any changes
+      # @param atom [Models::Atom] The original atom passed to execute
+      # @return [ExecutionResult] Success or failure result
+      def build_success_result(atom)
+        refreshed_atom = repository.find_atom(atom.id)
+        # Handle case where atom was deleted during execution
+        return ExecutionResult.failure(error: 'Atom was deleted during execution', atom: atom) unless refreshed_atom
+
+        ExecutionResult.success(atom: refreshed_atom, close_reason: refreshed_atom.close_reason)
+      end
+
       # Route a tool call to the appropriate handler
       # @param tool_name [String] Name of the tool to call
       # @param arguments [Hash] Arguments for the tool
@@ -132,14 +143,10 @@ module Eluent
         # Only process allowed fields
         updates.slice(*ALLOWED_UPDATE_FIELDS).each do |field, value|
           case field
-          when :status
-            atom.status = Models::Status[value.to_sym]
-          when :priority
-            atom.priority = value
-          when :title, :description, :assignee
-            atom.public_send(:"#{field}=", value)
-          when :labels
-            atom.labels = value
+          when :status then atom.status = Models::Status[value.to_sym]
+          when :priority then atom.priority = value
+          when :labels then atom.labels = value
+          when :title, :description, :assignee then atom.public_send(:"#{field}=", value)
           end
         end
 
@@ -162,7 +169,7 @@ module Eluent
 
       def tool_list_ready_items(sort: 'priority', type: nil, assignee: nil, limit: 10)
         # Enforce documented maximum limit
-        effective_limit = [limit.to_i.clamp(1, MAX_LIST_LIMIT), MAX_LIST_LIMIT].min
+        effective_limit = limit.to_i.clamp(1, MAX_LIST_LIMIT)
 
         indexer = repository.indexer
         blocking_resolver = Graph::BlockingResolver.new(indexer)

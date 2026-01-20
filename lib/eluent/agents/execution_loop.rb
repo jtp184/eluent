@@ -26,13 +26,13 @@ module Eluent
       # @param on_iteration [Proc, nil] Callback after each iteration
       # @return [LoopResult] Summary of the run
       def run(max_iterations: nil, assignee_filter: nil, type_filter: nil, on_iteration: nil)
-        @running = true
-        @processed_count = 0
-        @error_count = 0
+        self.running = true
+        self.processed_count = 0
+        self.error_count = 0
         results = []
 
         iteration = 0
-        while @running && (max_iterations.nil? || iteration < max_iterations)
+        while running && (max_iterations.nil? || iteration < max_iterations)
           atom = begin
             find_ready_work(assignee_filter: assignee_filter, type_filter: type_filter)
           rescue StandardError
@@ -45,9 +45,9 @@ module Eluent
           results << result
 
           if result.success
-            @processed_count += 1
+            self.processed_count += 1
           else
-            @error_count += 1
+            self.error_count += 1
           end
 
           on_iteration&.call(iteration, result)
@@ -56,27 +56,28 @@ module Eluent
 
         LoopResult.new(
           iterations: iteration,
-          processed: @processed_count,
-          errors: @error_count,
+          processed: processed_count,
+          errors: error_count,
           results: results
         )
       ensure
-        @running = false
+        self.running = false
       end
 
       # Stop the running loop
       def stop!
-        @running = false
+        self.running = false
       end
 
       # Check if loop is running
       def running?
-        @running
+        running
       end
 
       private
 
       attr_reader :repository, :executor, :git_adapter, :configuration
+      attr_accessor :running, :processed_count, :error_count
 
       def find_ready_work(assignee_filter:, type_filter:)
         calculator = build_readiness_calculator
@@ -148,7 +149,7 @@ module Eluent
       def handle_result(atom, result)
         return unless result.success
 
-        # Add comment about completion if item was closed
+        # Record work summary as audit trail for human review
         if result.close_reason
           repository.create_comment(
             parent_id: atom.id,
