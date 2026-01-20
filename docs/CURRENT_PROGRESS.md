@@ -13,7 +13,7 @@ This document tracks progress towards completing the Ledger Branch feature defin
 | Phase 1: GlobalPaths Infrastructure | Complete | 100% |
 | Phase 2: GitAdapter Extensions | Complete | 100% |
 | Phase 3: LedgerSyncer Core | Complete | 100% |
-| Phase 4: LedgerSyncState | Not Started | 0% |
+| Phase 4: LedgerSyncState | Complete | 100% |
 | Phase 5: ConfigLoader Updates | Not Started | 0% |
 | Phase 6: CLI Commands | Not Started | 0% |
 | Phase 7: Daemon Integration | Not Started | 0% |
@@ -21,7 +21,7 @@ This document tracks progress towards completing the Ledger Branch feature defin
 | Phase 9: Stale Worktree Recovery | Not Started | 0% |
 | Phase 10: Stale Claim Management | Not Started | 0% |
 
-**Current State**: Phase 3 complete. Ready to start Phase 4.
+**Current State**: Phase 4 complete. Ready to start Phase 5.
 
 ---
 
@@ -128,24 +128,39 @@ Persists last sync times, offline claims, and worktree validity to disk.
 
 ### Implementation
 
-- [ ] `lib/eluent/sync/ledger_sync_state.rb` — LedgerSyncState class with:
-  - [ ] `VERSION` constant
-  - [ ] Attributes: `last_pull_at`, `last_push_at`, `ledger_head`, `worktree_valid`, `offline_claims`, `schema_version`
-  - [ ] `#initialize(global_paths:, clock:)`
-  - [ ] `#load`
-  - [ ] `#save`
-  - [ ] `#update_pull(head_sha:)`
-  - [ ] `#update_push(head_sha:)`
-  - [ ] `#record_offline_claim(atom_id:, agent_id:, claimed_at:)`
-  - [ ] `#clear_offline_claim(atom_id:)`
-  - [ ] `#reset!`
-  - [ ] `#migrate!`
-  - [ ] File locking during save
-  - [ ] Corruption recovery
+- [x] `lib/eluent/sync/ledger_sync_state.rb` — LedgerSyncState class with:
+  - [x] `VERSION` constant (schema versioning for migrations)
+  - [x] `MAX_OFFLINE_CLAIMS` constant (prevents unbounded growth)
+  - [x] Attributes: `last_pull_at`, `last_push_at`, `ledger_head`, `worktree_valid`, `offline_claims`, `schema_version`
+  - [x] `#initialize(global_paths:, clock:)`
+  - [x] `#load` (with corruption recovery)
+  - [x] `#save` (atomic write via temp file + rename)
+  - [x] `#update_pull(head_sha:)`
+  - [x] `#update_push(head_sha:)`
+  - [x] `#record_offline_claim(atom_id:, agent_id:, claimed_at:)`
+  - [x] `#clear_offline_claim(atom_id:)`
+  - [x] `#offline_claims?` (predicate for pending claims)
+  - [x] `#reset!`
+  - [x] `#migrate!` (schema version checking and future migration support)
+  - [x] `#invalidate_worktree!`
+  - [x] `#exists?`
+  - [x] `#to_h` (JSON serialization)
+  - [x] File locking during save (`with_lock` using `File.flock`)
+  - [x] Corruption recovery (warns and resets on invalid JSON)
+  - [x] `LedgerSyncStateError` exception class
 
 ### Specs
 
-- [ ] `spec/eluent/sync/ledger_sync_state_spec.rb`
+- [x] `spec/eluent/sync/ledger_sync_state_spec.rb` (59 examples, 0 failures)
+
+### Implementation Notes
+
+- State file stored as JSON at `~/.eluent/<repo>/.ledger-sync-state`
+- Atomic writes using temp file + rename pattern
+- File locking via separate lock file (gracefully handles FakeFS and unsupported filesystems)
+- Offline claims limited to 1000 entries, oldest dropped with warning
+- Schema versioning for future migrations (rejects files with newer versions)
+- Corrupted files trigger reset with warning, never fail operations
 
 ---
 

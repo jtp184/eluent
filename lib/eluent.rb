@@ -46,6 +46,7 @@ require_relative 'eluent/lifecycle/readiness_calculator'
 # Sync
 require_relative 'eluent/sync/errors'
 require_relative 'eluent/sync/sync_state'
+require_relative 'eluent/sync/ledger_sync_state'
 require_relative 'eluent/sync/git_adapter'
 require_relative 'eluent/sync/conflict_resolver'
 require_relative 'eluent/sync/merge_engine'
