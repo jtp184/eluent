@@ -10,7 +10,7 @@ This document tracks progress towards completing the Ledger Branch feature defin
 
 | Phase | Status | Progress |
 |-------|--------|----------|
-| Phase 1: GlobalPaths Infrastructure | Not Started | 0% |
+| Phase 1: GlobalPaths Infrastructure | Complete | 100% |
 | Phase 2: GitAdapter Extensions | Not Started | 0% |
 | Phase 3: LedgerSyncer Core | Not Started | 0% |
 | Phase 4: LedgerSyncState | Not Started | 0% |
@@ -21,7 +21,7 @@ This document tracks progress towards completing the Ledger Branch feature defin
 | Phase 9: Stale Worktree Recovery | Not Started | 0% |
 | Phase 10: Stale Claim Management | Not Started | 0% |
 
-**Current State**: Not started.
+**Current State**: Phase 1 complete. Ready to start Phase 2.
 
 ---
 
@@ -31,22 +31,23 @@ Manages paths under `~/.eluent/<repo>/` for worktree and state files.
 
 ### Implementation
 
-- [ ] `lib/eluent/storage/global_paths.rb` — GlobalPaths class with:
-  - [ ] `GLOBAL_DIR` constant (`~/.eluent/`)
-  - [ ] `#initialize(repo_name:)`
-  - [ ] `#global_dir`
-  - [ ] `#repo_dir`
-  - [ ] `#sync_worktree_dir`
-  - [ ] `#ledger_sync_state_file`
-  - [ ] `#ledger_lock_file`
-  - [ ] `#ensure_directories!`
-  - [ ] `#valid?`
-  - [ ] XDG_DATA_HOME support
-  - [ ] Repo name sanitization
+- [x] `lib/eluent/storage/global_paths.rb` — GlobalPaths class with:
+  - [x] `GLOBAL_DIR_NAME` constant (`.eluent`)
+  - [x] `#initialize(repo_name:)`
+  - [x] `#global_dir`
+  - [x] `#repo_dir`
+  - [x] `#sync_worktree_dir`
+  - [x] `#ledger_sync_state_file`
+  - [x] `#ledger_lock_file`
+  - [x] `#ensure_directories!`
+  - [x] `#valid?`
+  - [x] XDG_DATA_HOME support
+  - [x] Repo name sanitization
+  - [x] `GlobalPathsError` exception class
 
 ### Specs
 
-- [ ] `spec/eluent/storage/global_paths_spec.rb`
+- [x] `spec/eluent/storage/global_paths_spec.rb` (35 examples, 0 failures)
 
 ---
 

@@ -29,6 +29,7 @@ require_relative 'eluent/storage/serializers/atom_serializer'
 require_relative 'eluent/storage/serializers/bond_serializer'
 require_relative 'eluent/storage/serializers/comment_serializer'
 require_relative 'eluent/storage/jsonl_repository'
+require_relative 'eluent/storage/global_paths'
 
 # Registry
 require_relative 'eluent/registry/id_generator'
