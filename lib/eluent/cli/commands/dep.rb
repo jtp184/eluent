@@ -215,8 +215,8 @@ module Eluent
           short_id = repository.id_resolver.short_id(atom)
           puts "#{@pastel.bold('Dependencies for')} #{short_id} (#{truncate(atom.title, max_length: 40)})\n\n"
 
-          output_bond_section(bonds[:outgoing], 'Blocks (outgoing)', :target_id)
-          output_bond_section(bonds[:incoming], 'Blocked by (incoming)', :source_id)
+          output_bond_section(bonds[:outgoing], 'Depends on', :target_id)
+          output_bond_section(bonds[:incoming], 'Depended on by', :source_id)
           puts @pastel.dim('No dependencies') if bonds[:outgoing].empty? && bonds[:incoming].empty?
         end
 
