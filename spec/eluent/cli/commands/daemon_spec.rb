@@ -85,8 +85,8 @@ RSpec.describe Eluent::CLI::Commands::Daemon do
       end
 
       it 'calls start without foreground by default' do
-        expect(server).to receive(:start).with(foreground: false)
         run_command('start', robot_mode: true)
+        expect(server).to have_received(:start).with(foreground: false)
       end
     end
 
@@ -96,8 +96,8 @@ RSpec.describe Eluent::CLI::Commands::Daemon do
       end
 
       it 'calls start with foreground option' do
-        expect(server).to receive(:start).with(foreground: true)
         run_command('start', '--foreground', robot_mode: true)
+        expect(server).to have_received(:start).with(foreground: true)
       end
     end
 

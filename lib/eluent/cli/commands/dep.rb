@@ -42,7 +42,8 @@ module Eluent
         option :type do
           short '-t'
           long '--type TYPE'
-          desc 'Dependency type: blocks, parent_child, conditional_blocks, waits_for (blocking); related, duplicates, discovered_from, replies_to (informational). Default: blocks'
+          desc 'Type: blocks (default), parent_child, conditional_blocks, waits_for, ' \
+               'related, duplicates, discovered_from, replies_to'
           default 'blocks'
         end
 
@@ -59,10 +60,7 @@ module Eluent
         end
 
         def run
-          if params[:help]
-            puts help
-            return 0
-          end
+          return 0.tap { puts help } if params[:help]
 
           action = params[:action]
 
@@ -219,10 +217,7 @@ module Eluent
 
           output_bond_section(bonds[:outgoing], 'Blocks (outgoing)', :target_id)
           output_bond_section(bonds[:incoming], 'Blocked by (incoming)', :source_id)
-
-          return unless bonds[:outgoing].empty? && bonds[:incoming].empty?
-
-          puts @pastel.dim('No dependencies')
+          puts @pastel.dim('No dependencies') if bonds[:outgoing].empty? && bonds[:incoming].empty?
         end
 
         def output_bond_section(bonds, title, id_method)

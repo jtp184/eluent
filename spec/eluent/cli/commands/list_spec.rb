@@ -140,7 +140,7 @@ RSpec.describe Eluent::CLI::Commands::List do
 
   describe '--label filter' do
     before do
-      create_atom(title: 'Auth Task', labels: ['auth', 'security'])
+      create_atom(title: 'Auth Task', labels: %w[auth security])
       create_atom(title: 'UI Task', labels: ['frontend'])
     end
 

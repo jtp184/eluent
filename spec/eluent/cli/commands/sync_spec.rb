@@ -39,7 +39,7 @@ RSpec.describe Eluent::CLI::Commands::Sync do
       FileUtils.mkdir_p(File.join(no_git_path, '.eluent', 'formulas'))
       File.write(File.join(no_git_path, '.eluent', 'config.yaml'), YAML.dump('repo_name' => 'testrepo'))
       File.write(File.join(no_git_path, '.eluent', 'data.jsonl'), "{\"_type\":\"header\",\"repo_name\":\"testrepo\"}\n")
-      # Note: no .git directory
+      # NOTE: no .git directory
       allow(Dir).to receive(:pwd).and_return(no_git_path)
     end
 
@@ -108,18 +108,18 @@ RSpec.describe Eluent::CLI::Commands::Sync do
     end
 
     it 'passes pull_only option' do
-      expect(orchestrator).to receive(:sync).with(hash_including(pull_only: true))
       run_command('--pull-only', robot_mode: true)
+      expect(orchestrator).to have_received(:sync).with(hash_including(pull_only: true))
     end
 
     it 'passes push_only option' do
-      expect(orchestrator).to receive(:sync).with(hash_including(push_only: true))
       run_command('--push-only', robot_mode: true)
+      expect(orchestrator).to have_received(:sync).with(hash_including(push_only: true))
     end
 
     it 'passes dry_run option' do
-      expect(orchestrator).to receive(:sync).with(hash_including(dry_run: true))
       run_command('--dry-run', robot_mode: true)
+      expect(orchestrator).to have_received(:sync).with(hash_including(dry_run: true))
     end
 
     context 'when up to date' do

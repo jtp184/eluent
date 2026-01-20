@@ -10,9 +10,9 @@ RSpec.describe Eluent::CLI::Commands::Config do
   before do
     FileUtils.mkdir_p(File.join(root_path, '.eluent', 'formulas'))
     File.write(File.join(root_path, '.eluent', 'config.yaml'), YAML.dump(
-                                                                'repo_name' => 'testrepo',
-                                                                'defaults' => { 'priority' => 2 }
-                                                              ))
+                                                                 'repo_name' => 'testrepo',
+                                                                 'defaults' => { 'priority' => 2 }
+                                                               ))
     File.write(
       File.join(root_path, '.eluent', 'data.jsonl'),
       "{\"_type\":\"header\",\"repo_name\":\"testrepo\"}\n"
@@ -137,7 +137,7 @@ RSpec.describe Eluent::CLI::Commands::Config do
       run_command('set', 'enabled', 'true')
 
       config = YAML.safe_load_file(File.join(root_path, '.eluent', 'config.yaml'))
-      expect(config['enabled']).to eq(true)
+      expect(config['enabled']).to be(true)
     end
 
     it 'returns 0 on success' do
