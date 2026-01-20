@@ -53,6 +53,13 @@ module Eluent
           raise ParseError, "Cannot compose same formula multiple times: #{duplicate_ids.join(', ')}"
         end
 
+        # Defensive check: formula IDs should not contain the prefix delimiter
+        # (Formula ID validation should prevent this, but check here for safety)
+        invalid_ids = formula_ids.select { |id| id.include?(PREFIX_DELIMITER) }
+        unless invalid_ids.empty?
+          raise ParseError, "Formula IDs cannot contain '#{PREFIX_DELIMITER}': #{invalid_ids.join(', ')}"
+        end
+
         # Check for variable name conflicts
         all_vars = formulas.flat_map { |f| f.variables.keys }
         duplicates = all_vars.select { |v| all_vars.count(v) > 1 }.uniq
@@ -103,6 +110,13 @@ module Eluent
         )
       end
 
+      # Creates a conditional composition where steps are tagged with their source formula.
+      #
+      # NOTE: All steps from all formulas are included in the composed formula. The 'branch'
+      # variable and condition labels (e.g., "condition:branch=formula-a") are metadata hints
+      # for the Instantiator or external tooling to filter steps at instantiation time.
+      # Currently, the Instantiator creates all steps regardless of branch selection.
+      # Filtering can be implemented by checking step labels against the resolved branch value.
       def compose_conditional(formulas, new_id, title)
         merged_steps, merged_variables = collect_conditional_steps_and_vars(formulas)
         build_composed_formula(

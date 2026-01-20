@@ -150,6 +150,22 @@ RSpec.describe Eluent::Formulas::Composer, :filesystem do
         expect { composer.compose(%w[design design], new_id: 'duplicate', type: :sequential) }
           .to raise_error(Eluent::Formulas::ParseError, /Cannot compose same formula multiple times/)
       end
+
+      it 'rejects formula IDs containing prefix delimiter during parsing' do
+        # Formula IDs with :: are rejected at parse time by the Formula model validation
+        # (formula id must match [a-z0-9-]+), providing defense-in-depth before
+        # the composer's explicit check would run
+        write_formula('bad::id', <<~YAML)
+          id: bad::id
+          title: Bad Formula
+          steps:
+            - id: step1
+              title: Step 1
+        YAML
+
+        expect { composer.compose(%w[design bad::id], new_id: 'combined', type: :sequential) }
+          .to raise_error(Eluent::Formulas::ParseError, /formula id must match/)
+      end
     end
   end
 

@@ -101,7 +101,7 @@ module Eluent
 
       def build_step(atom, graph, literal_to_var_map)
         step_id = generate_step_id(atom)
-        dependencies = graph[atom.id].map { |dep_id| id_to_step_id(dep_id, graph) }.compact
+        dependencies = graph[atom.id].map { |dep_id| id_to_step_id(dep_id) }.compact
 
         Models::Step.new(
           id: step_id,
@@ -120,7 +120,7 @@ module Eluent
         atom.metadata&.dig('formula_step_id') || slugify(atom.title)
       end
 
-      def id_to_step_id(atom_id, _graph)
+      def id_to_step_id(atom_id)
         atom = repository.find_atom_by_id(atom_id)
         return nil unless atom
 

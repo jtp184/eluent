@@ -146,6 +146,8 @@ module Eluent
         key_phrases = %w[resolved fixed decided concluded agreed]
         highlights = []
 
+        # Examine middle comments only (excluding first and last which are already highlighted).
+        # For size <= 2, the early return above handles it. For size == 3, this yields [1].
         comments[1..-2].each do |comment|
           content = comment.content&.strip || ''
           next unless key_phrases.any? { |phrase| content.downcase.include?(phrase) }
