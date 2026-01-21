@@ -14,14 +14,14 @@ This document tracks progress towards completing the Ledger Branch feature defin
 | Phase 2: GitAdapter Extensions | Complete | 100% |
 | Phase 3: LedgerSyncer Core | Complete | 100% |
 | Phase 4: LedgerSyncState | Complete | 100% |
-| Phase 5: ConfigLoader Updates | Not Started | 0% |
+| Phase 5: ConfigLoader Updates | Complete | 100% |
 | Phase 6: CLI Commands | Not Started | 0% |
 | Phase 7: Daemon Integration | Not Started | 0% |
 | Phase 8: ExecutionLoop Integration | Not Started | 0% |
 | Phase 9: Stale Worktree Recovery | Not Started | 0% |
 | Phase 10: Stale Claim Management | Not Started | 0% |
 
-**Current State**: Phase 4 complete. Ready to start Phase 5.
+**Current State**: Phase 5 complete. Ready to start Phase 6.
 
 ---
 
@@ -170,19 +170,28 @@ Add `sync:` config section with ledger options.
 
 ### Implementation
 
-- [ ] `lib/eluent/storage/config_loader.rb` — Add to DEFAULT_CONFIG:
-  - [ ] `sync.ledger_branch`
-  - [ ] `sync.auto_claim_push`
-  - [ ] `sync.claim_retries`
-  - [ ] `sync.claim_timeout_hours`
-  - [ ] `sync.offline_mode`
-  - [ ] `sync.network_timeout`
-  - [ ] `sync.global_path_override`
-  - [ ] Validation for new config options
+- [x] `lib/eluent/storage/config_loader.rb` — Add to DEFAULT_CONFIG:
+  - [x] `sync.ledger_branch` (validated via `BranchError.valid_branch_name?`)
+  - [x] `sync.auto_claim_push` (boolean, default: true)
+  - [x] `sync.claim_retries` (1-100, default: 5)
+  - [x] `sync.claim_timeout_hours` (nullable float, warns if < 1)
+  - [x] `sync.offline_mode` (enum: 'local' | 'fail', default: 'local')
+  - [x] `sync.network_timeout` (5-300 seconds, default: 30)
+  - [x] `sync.global_path_override` (nullable path, expands ~)
+  - [x] Validation for new config options
+- [x] `ConfigError` exception class for validation failures
 
 ### Specs
 
-- [ ] `spec/eluent/storage/config_loader_spec.rb` — Extended specs for sync config
+- [x] `spec/eluent/storage/config_loader_spec.rb` — Extended specs for sync config (39 examples, 0 failures)
+
+### Implementation Notes
+
+- Branch name validation reuses `BranchError.valid_branch_name?` from GitAdapter
+- Numeric validations use warnings for out-of-range values and clamp to valid range
+- `offline_mode` raises `ConfigError` for invalid values (not correctable)
+- Invalid branch names raise `ConfigError` (not correctable)
+- Empty strings treated as nil (disabled) for optional string values
 
 ---
 
