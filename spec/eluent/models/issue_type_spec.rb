@@ -22,6 +22,10 @@ RSpec.describe Eluent::Models::IssueType do
       expect(described_class[:artifact]).to be_a(described_class)
     end
 
+    it 'includes discovery' do
+      expect(described_class[:discovery]).to be_a(described_class)
+    end
+
     it 'includes epic' do
       expect(described_class[:epic]).to be_a(described_class)
     end
@@ -54,6 +58,7 @@ RSpec.describe Eluent::Models::IssueType do
       expect(described_class[:bug]).not_to be_abstract
       expect(described_class[:task]).not_to be_abstract
       expect(described_class[:artifact]).not_to be_abstract
+      expect(described_class[:discovery]).not_to be_abstract
     end
 
     it 'returns true for abstract types' do
