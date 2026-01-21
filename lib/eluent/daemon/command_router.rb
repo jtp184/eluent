@@ -1,14 +1,23 @@
 # frozen_string_literal: true
 
+require 'socket'
+require_relative '../sync/ledger_syncer'
+require_relative '../sync/ledger_sync_state'
+require_relative '../storage/global_paths'
+require_relative 'concerns/ledger_handlers'
+
 module Eluent
   module Daemon
-    # Routes daemon requests to appropriate handlers
-    # Single responsibility: dispatch commands to handlers
+    # Routes daemon requests to appropriate handlers.
+    # Single responsibility: dispatch commands to handlers.
     class CommandRouter
-      COMMANDS = %w[ping list show create update close reopen ready sync comment bond].freeze
+      include Concerns::LedgerHandlers
 
-      def initialize(repo_cache: {})
+      COMMANDS = %w[ping list show create update close reopen ready sync comment bond claim ledger_sync].freeze
+
+      def initialize(repo_cache: {}, ledger_syncer_cache: {})
         @repo_cache = repo_cache
+        @ledger_syncer_cache = ledger_syncer_cache
         @mutex = Mutex.new
       end
 
@@ -40,13 +49,17 @@ module Eluent
         Protocol.build_error(id: id, code: 'VALIDATION_ERROR', message: e.message)
       rescue Graph::CycleDetectedError => e
         Protocol.build_error(id: id, code: 'CYCLE_DETECTED', message: e.message)
+      rescue Sync::LedgerSyncerError => e
+        Protocol.build_error(id: id, code: 'LEDGER_ERROR', message: e.message)
+      rescue Sync::LedgerSyncStateError => e
+        Protocol.build_error(id: id, code: 'LEDGER_STATE_ERROR', message: e.message)
       rescue StandardError => e
         Protocol.build_error(id: id, code: 'INTERNAL_ERROR', message: e.message)
       end
 
       private
 
-      attr_reader :repo_cache, :mutex
+      attr_reader :repo_cache, :ledger_syncer_cache, :mutex
 
       def handle_ping(_args, id)
         Protocol.build_success(id: id, data: { pong: true, time: Time.now.utc.iso8601 })
@@ -96,23 +109,21 @@ module Eluent
 
         raise Registry::IdNotFoundError, args[:id] unless atom
 
-        # Updatable fields (metaprogrammatically applied via send):
-        # - title, description: free-form text
-        # - status, issue_type: enumerated values
-        # - priority, assignee: optional scalar values
-        # - labels: array of strings
-        # - parent_id: hierarchy reference
-        # - defer_until, close_reason: lifecycle fields
-        %i[title description status issue_type priority assignee labels parent_id defer_until
-           close_reason].each do |field|
-          atom.send("#{field}=", args[field]) if args.key?(field)
-        end
-
-        atom.metadata = atom.metadata.merge(args[:metadata]) if args.key?(:metadata)
-
+        apply_atom_updates(atom, args)
         repo.update_atom(atom)
 
         Protocol.build_success(id: id, data: { atom: atom.to_h })
+      end
+
+      UPDATABLE_FIELDS = %i[title description status issue_type priority assignee labels parent_id defer_until
+                            close_reason].freeze
+      private_constant :UPDATABLE_FIELDS
+
+      def apply_atom_updates(atom, args)
+        UPDATABLE_FIELDS.each do |field|
+          atom.send("#{field}=", args[field]) if args.key?(field)
+        end
+        atom.metadata = atom.metadata.merge(args[:metadata]) if args.key?(:metadata)
       end
 
       def handle_close(args, id)
@@ -214,6 +225,10 @@ module Eluent
           Protocol.build_success(id: id, data: { bond: bond.to_h })
         end
       end
+
+      # ------------------------------------------------------------------
+      # Repository Management
+      # ------------------------------------------------------------------
 
       def get_repository(repo_path)
         raise Storage::RepositoryNotFoundError, repo_path if repo_path.nil?

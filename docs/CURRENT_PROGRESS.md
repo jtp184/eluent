@@ -1,6 +1,6 @@
 # Ledger Branch Implementation Progress
 
-**Last Updated**: 2026-01-20
+**Last Updated**: 2026-01-21
 
 This document tracks progress towards completing the Ledger Branch feature defined in `LEDGER_BRANCH.md`.
 
@@ -16,12 +16,12 @@ This document tracks progress towards completing the Ledger Branch feature defin
 | Phase 4: LedgerSyncState | Complete | 100% |
 | Phase 5: ConfigLoader Updates | Complete | 100% |
 | Phase 6: CLI Commands | Complete | 100% |
-| Phase 7: Daemon Integration | Not Started | 0% |
+| Phase 7: Daemon Integration | Complete | 100% |
 | Phase 8: ExecutionLoop Integration | Not Started | 0% |
-| Phase 9: Stale Worktree Recovery | Not Started | 0% |
+| Phase 9: Stale Worktree Recovery | Complete | 100% |
 | Phase 10: Stale Claim Management | Not Started | 0% |
 
-**Current State**: Phase 6 complete. Ready to start Phase 7.
+**Current State**: Phase 7 complete. Ready to start Phase 8.
 
 ---
 
@@ -241,16 +241,38 @@ Command handlers for claim/sync.
 
 ### Implementation
 
-- [ ] `lib/eluent/daemon/command_router.rb` — Add:
-  - [ ] `claim` to COMMANDS
-  - [ ] `ledger_sync` to COMMANDS
-  - [ ] `#handle_claim(args, id)`
-  - [ ] `#handle_ledger_sync(args, id)`
-  - [ ] Per-repo LedgerSyncer instance management
+- [x] `lib/eluent/daemon/command_router.rb` — Includes `LedgerHandlers` module:
+  - [x] `claim` to COMMANDS
+  - [x] `ledger_sync` to COMMANDS
+  - [x] Per-repo LedgerSyncer instance caching (`ledger_syncer_cache`)
+  - [x] Error handling for `LedgerSyncerError` and `LedgerSyncStateError`
+- [x] `lib/eluent/daemon/concerns/ledger_handlers.rb` — Extracted module for:
+  - [x] `#handle_claim(args, id)` — Claims atom with support for:
+    - Local-only claiming when ledger sync not configured
+    - Remote-synced claiming via LedgerSyncer
+    - Force claim to steal from another agent
+    - Offline claim recording when remote unavailable
+  - [x] `#handle_ledger_sync(args, id)` — Handles actions:
+    - `setup` — Initialize ledger branch and worktree
+    - `teardown` — Remove worktree and reset state
+    - `pull` — Fetch and apply remote ledger changes
+    - `push` — Push local ledger changes to remote
+    - `status` — Return comprehensive sync health info
+    - `reconcile` — Push pending offline claims
+    - `force_resync` — Reset local state from remote
 
 ### Specs
 
-- [ ] `spec/eluent/daemon/command_router_spec.rb` — Extended specs for new handlers
+- [x] `spec/eluent/daemon/command_router_spec.rb` — Extended specs for new handlers (27 examples, 0 failures)
+
+### Implementation Notes
+
+- LedgerSyncer instances are cached per repository path for performance
+- Mutex locking refactored to avoid deadlock when building syncers (uses non-locking helper methods)
+- Claim handler falls back to local claiming when ledger sync unavailable
+- Offline claims are recorded when local claiming with ledger sync configured
+- Status action works even when ledger sync isn't fully set up (returns configured but not available)
+- Handlers extracted to `Concerns::LedgerHandlers` module to maintain CommandRouter under class length limits
 
 ---
 
