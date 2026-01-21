@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'fileutils'
+require 'time'
 require_relative 'concerns/ledger_worktree'
 require_relative 'concerns/ledger_atom_operations'
 
@@ -32,6 +33,7 @@ module Eluent
     #   result = syncer.claim_and_push(atom_id: 'TSV4', agent_id: 'agent-1')
     #
     # @see LEDGER_BRANCH.md for full implementation details
+    # rubocop:disable Metrics/ClassLength -- Core syncer with many related operations; extracting more would hurt cohesion
     class LedgerSyncer
       include Concerns::LedgerWorktree
       include Concerns::LedgerAtomOperations
@@ -47,6 +49,10 @@ module Eluent
 
       # Directory containing atom and agent state files
       LEDGER_DIR = '.eluent'
+
+      # Seconds per hour, for claim timeout calculations
+      SECONDS_PER_HOUR = 3600
+      private_constant :SECONDS_PER_HOUR
 
       # Frozen empty array for reconcile_offline_claims! placeholder
       EMPTY_ARRAY = [].freeze
@@ -89,10 +95,12 @@ module Eluent
         end
       end
 
-      attr_reader :repository, :git_adapter, :global_paths, :remote, :max_retries, :branch
+      attr_reader :repository, :git_adapter, :global_paths, :remote, :max_retries, :branch,
+                  :claim_timeout_hours
 
       def initialize(repository:, git_adapter:, global_paths:, remote: 'origin',
-                     max_retries: MAX_RETRIES, branch: LEDGER_BRANCH, clock: Time)
+                     max_retries: MAX_RETRIES, branch: LEDGER_BRANCH, clock: Time,
+                     claim_timeout_hours: nil)
         @repository = repository
         @git_adapter = git_adapter
         @global_paths = global_paths
@@ -100,6 +108,7 @@ module Eluent
         @max_retries = max_retries.to_i.clamp(1, 100)
         @branch = branch
         @clock = clock
+        @claim_timeout_hours = normalize_claim_timeout(claim_timeout_hours)
       end
 
       # ------------------------------------------------------------------
@@ -209,10 +218,14 @@ module Eluent
       #
       # Uses hard reset (not merge) to avoid conflicts - the ledger branch
       # is append-only so the remote is always authoritative.
+      #
+      # When `claim_timeout_hours` is configured, automatically releases
+      # stale claims after pulling the latest state.
       def pull_ledger
         recover_stale_worktree! if worktree_stale?
         fetch_ledger_branch
         merge_or_reset_ledger
+        auto_release_stale_claims
 
         SyncResult.new(success: true, changes_applied: 1)
       rescue GitError, BranchError, LedgerSyncerError => e
@@ -302,6 +315,79 @@ module Eluent
       # @return [Array<Hash>] results for each reconciliation attempt (Phase 4)
       def reconcile_offline_claims!
         EMPTY_ARRAY
+      end
+
+      # ------------------------------------------------------------------
+      # Stale Claim Management
+      # ------------------------------------------------------------------
+
+      # Returns atoms with stale claims (in_progress beyond timeout threshold).
+      #
+      # A claim is considered stale when:
+      # - status is 'in_progress'
+      # - updated_at is before the given threshold
+      #
+      # Use this for querying without modifying state.
+      #
+      # @param updated_before [Time] claims with updated_at before this are stale
+      # @return [Array<Hash>] atoms matching stale criteria, with symbolized keys
+      def stale_claims(updated_before:)
+        find_stale_claims_in_worktree(updated_before: updated_before)
+      end
+
+      # Releases stale claims, returning atoms to 'open' status.
+      #
+      # For each stale claim found:
+      # 1. Sets status to 'open'
+      # 2. Clears the assignee
+      # 3. Commits with message identifying the released claim
+      #
+      # @param updated_before [Time] claims with updated_at before this are released
+      # @return [Array<String>] IDs of atoms whose claims were released
+      def release_stale_claims(updated_before:)
+        stale = find_stale_claims_in_worktree(updated_before: updated_before)
+        return [] if stale.empty?
+
+        released_ids = stale.map { |atom| atom[:id] }
+        release_atoms_in_worktree(released_ids)
+
+        message = build_release_commit_message(released_ids, stale)
+        commit_ledger_changes(message: message)
+
+        released_ids
+      end
+
+      # Updates an atom's timestamp without changing other fields (heartbeat).
+      #
+      # Long-running agents call this periodically to prevent claims from being
+      # auto-released as stale. Recommended interval: claim_timeout_hours / 2.
+      #
+      # Any agent can heartbeat any in_progress atom—this supports cooperative
+      # scenarios where agents keep each other's claims alive.
+      #
+      # Uses optimistic locking with retry like claim_and_push: on push conflict,
+      # retries from pull with exponential backoff.
+      #
+      # @param atom_id [String] the atom to heartbeat
+      # @return [ClaimResult] success with claimed_by and retries, or failure with error
+      def heartbeat(atom_id:)
+        if atom_id.nil? || atom_id.to_s.strip.empty?
+          return ClaimResult.new(success: false, error: 'atom_id cannot be nil or empty')
+        end
+
+        retries = 0
+
+        loop do
+          result = attempt_heartbeat(atom_id)
+          return result.with(retries: retries) if result.success || !retriable_heartbeat_error?(result)
+
+          retries += 1
+          if retries >= max_retries
+            return ClaimResult.new(success: false, error: 'Max retries exceeded', retries: retries)
+          end
+
+          sleep_with_backoff(retries)
+        end
       end
 
       private
@@ -422,7 +508,147 @@ module Eluent
           FileUtils.rm_f(file)
         end
       end
+
+      # ------------------------------------------------------------------
+      # Heartbeat Helpers
+      # ------------------------------------------------------------------
+
+      # Single attempt at heartbeat without retry logic.
+      def attempt_heartbeat(atom_id)
+        pull_result = pull_ledger
+        return ClaimResult.new(success: false, error: pull_result.error) unless pull_result.success
+
+        atom = find_atom_in_worktree(atom_id)
+        return ClaimResult.new(success: false, error: "Atom not found: #{atom_id}") unless atom
+
+        unless atom[:status] == 'in_progress'
+          return ClaimResult.new(success: false, error: "Cannot heartbeat atom in #{atom[:status]} state")
+        end
+
+        touch_atom_timestamp(atom_id)
+        commit_ledger_changes(message: "Heartbeat for #{atom_id}")
+
+        push_result = push_ledger
+        return ClaimResult.new(success: false, error: push_result.error) unless push_result.success
+
+        ClaimResult.new(success: true, claimed_by: atom[:assignee])
+      end
+
+      # Determines if a heartbeat error is worth retrying.
+      #
+      # Push failures are retriable (likely conflict with another agent).
+      # Other failures (atom not found, wrong state) are not.
+      def retriable_heartbeat_error?(result)
+        return false if result.success
+
+        error = result.error.to_s
+        error.start_with?('Push failed')
+      end
+
+      # ------------------------------------------------------------------
+      # Stale Claim Helpers
+      # ------------------------------------------------------------------
+
+      # Normalizes claim_timeout_hours to nil (disabled) or a positive float.
+      def normalize_claim_timeout(value)
+        return nil if value.nil?
+
+        hours = value.to_f
+        hours.positive? ? hours : nil
+      end
+
+      # Scans the ledger data file for claims that are stale.
+      #
+      # @param updated_before [Time] claims with updated_at before this are stale
+      # @return [Array<Hash>] stale atoms with symbolized keys
+      def find_stale_claims_in_worktree(updated_before:)
+        data_file = File.join(worktree_ledger_dir, 'data.jsonl')
+        return [] unless File.exist?(data_file)
+
+        stale = []
+        File.foreach(data_file) do |line|
+          record = JSON.parse(line, symbolize_names: true)
+          next unless stale_claim?(record, updated_before)
+
+          stale << record
+        rescue JSON::ParserError
+          next
+        end
+        stale
+      end
+
+      # Determines if an atom record represents a stale claim.
+      def stale_claim?(record, updated_before)
+        return false unless record[:_type] == 'atom'
+        return false unless record[:status] == 'in_progress'
+
+        updated_at = parse_timestamp(record[:updated_at])
+        return false unless updated_at
+
+        updated_at < updated_before
+      end
+
+      # Parses an ISO8601 timestamp string into a Time object.
+      #
+      # @param timestamp [String, nil] ISO8601 formatted timestamp
+      # @return [Time, nil] parsed time or nil if invalid/missing
+      def parse_timestamp(timestamp)
+        return nil if timestamp.nil? || timestamp.to_s.strip.empty?
+
+        Time.parse(timestamp)
+      rescue ArgumentError
+        nil
+      end
+
+      # Builds a descriptive commit message for stale claim releases.
+      #
+      # For single releases, includes the previous assignee for auditability.
+      # For multiple releases, lists IDs up to a reasonable length, then summarizes.
+      def build_release_commit_message(released_ids, stale_atoms)
+        case released_ids.size
+        when 1
+          atom = stale_atoms.first
+          "Auto-release stale claim on #{atom[:id]} (was: #{atom[:assignee]})"
+        when 2..5
+          "Auto-release #{released_ids.size} stale claims: #{released_ids.join(', ')}"
+        else
+          preview = released_ids.first(3).join(', ')
+          "Auto-release #{released_ids.size} stale claims: #{preview}, ..."
+        end
+      end
+
+      # Calculates the stale threshold time based on claim_timeout_hours.
+      #
+      # @return [Time, nil] threshold time, or nil if auto-release is disabled
+      def stale_threshold_time
+        return nil unless claim_timeout_hours
+
+        clock.now - (claim_timeout_hours * SECONDS_PER_HOUR)
+      end
+
+      # Releases stale claims if claim_timeout_hours is configured.
+      #
+      # Called automatically during pull_ledger. Released atoms are logged
+      # for auditability. Pushes changes to remote to ensure other agents
+      # see the released claims.
+      #
+      # Push failures are logged but don't fail the pull operation—the local
+      # release still helps this agent, and the next pull will retry.
+      def auto_release_stale_claims
+        threshold = stale_threshold_time
+        return unless threshold
+
+        released = release_stale_claims(updated_before: threshold)
+        return if released.empty?
+
+        warn "el: auto-released #{released.size} stale claim(s): #{released.join(', ')}"
+
+        # Best-effort push; failure is logged but doesn't fail the pull
+        push_result = push_ledger
+        warn "el: failed to push auto-released claims: #{push_result.error}" unless push_result.success
+      end
     end
+    # rubocop:enable Metrics/ClassLength
 
     # Raised for ledger sync operations that fail in recoverable ways.
     class LedgerSyncerError < Error; end

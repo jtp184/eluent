@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'fileutils'
 require 'json'
 
 module Eluent
@@ -20,6 +21,7 @@ module Eluent
       #   - #worktree_ledger_dir - path to .eluent/ in the worktree
       #   - #clock - Time-like object responding to #now
       #   - #commit_ledger_changes - commits pending changes to the worktree
+      # rubocop:disable Metrics/ModuleLength -- Cohesive atom operations; extracting would scatter related logic
       module LedgerAtomOperations
         private
 
@@ -127,7 +129,92 @@ module Eluent
         rescue JSON::ParserError
           line # Preserve malformed lines unchanged
         end
+
+        # Releases multiple atoms in a single file write (batch operation).
+        #
+        # More efficient than calling update_atom_in_worktree N times when
+        # releasing multiple stale claims.
+        #
+        # @param atom_ids [Array<String>] atom IDs to release
+        # @raise [LedgerSyncerError] if the data file doesn't exist or write fails
+        def release_atoms_in_worktree(atom_ids)
+          return if atom_ids.empty?
+
+          data_file = File.join(worktree_ledger_dir, 'data.jsonl')
+          raise LedgerSyncerError, "Ledger data file not found: #{data_file}" unless File.exist?(data_file)
+
+          id_set = atom_ids.to_set
+          lines = File.readlines(data_file)
+          updated_lines = lines.map { |line| release_line_if_matching(line, id_set) }
+
+          temp_file = "#{data_file}.#{Process.pid}.tmp"
+          begin
+            File.write(temp_file, updated_lines.join)
+            File.rename(temp_file, data_file)
+          rescue SystemCallError => e
+            FileUtils.rm_f(temp_file)
+            raise LedgerSyncerError, "Failed to release atoms: #{e.message}"
+          end
+        end
+
+        def release_line_if_matching(line, id_set)
+          record = JSON.parse(line, symbolize_names: true)
+          return line unless record[:_type] == 'atom' && id_set.include?(record[:id])
+
+          record[:status] = 'open'
+          record[:assignee] = nil
+          record[:updated_at] = clock.now.utc.iso8601
+          "#{JSON.generate(record)}\n"
+        rescue JSON::ParserError
+          line
+        end
+
+        # Updates only the timestamp of an atom (heartbeat operation).
+        #
+        # Unlike `update_atom_in_worktree`, this method doesn't modify any fields
+        # except `updated_at`. Used to keep claims alive without changing state.
+        #
+        # @param atom_id [String] the atom identifier to touch
+        # @return [Boolean] true if atom was found and touched, false if not found
+        # @raise [LedgerSyncerError] if the data file doesn't exist or write fails
+        def touch_atom_timestamp(atom_id)
+          data_file = File.join(worktree_ledger_dir, 'data.jsonl')
+          raise LedgerSyncerError, "Ledger data file not found: #{data_file}" unless File.exist?(data_file)
+
+          lines = File.readlines(data_file)
+          found = false
+          updated_lines = lines.map do |line|
+            result, was_found = touch_line_if_matching(line, atom_id)
+            found ||= was_found
+            result
+          end
+
+          return false unless found
+
+          temp_file = "#{data_file}.#{Process.pid}.tmp"
+          begin
+            File.write(temp_file, updated_lines.join)
+            File.rename(temp_file, data_file)
+          rescue SystemCallError => e
+            FileUtils.rm_f(temp_file)
+            raise LedgerSyncerError, "Failed to touch atom #{atom_id}: #{e.message}"
+          end
+
+          true
+        end
+
+        # Returns [updated_line, was_matched] tuple.
+        def touch_line_if_matching(line, atom_id)
+          record = JSON.parse(line, symbolize_names: true)
+          return [line, false] unless record[:_type] == 'atom' && record[:id] == atom_id
+
+          record[:updated_at] = clock.now.utc.iso8601
+          ["#{JSON.generate(record)}\n", true]
+        rescue JSON::ParserError
+          [line, false]
+        end
       end
+      # rubocop:enable Metrics/ModuleLength
     end
   end
 end

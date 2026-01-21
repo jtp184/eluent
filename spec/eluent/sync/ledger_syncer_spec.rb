@@ -952,6 +952,572 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
       expect(syncer.reconcile_offline_claims!).to eq([])
     end
   end
+
+  # ===========================================================================
+  # Stale Claim Management
+  # ===========================================================================
+
+  describe '#stale_claims' do
+    let(:data_file) { "#{worktree_path}/.eluent/data.jsonl" }
+    let(:three_hours_ago) { frozen_time - (3 * 3600) }
+    let(:one_hour_ago) { frozen_time - 3600 }
+    let(:threshold) { frozen_time - (2 * 3600) } # 2 hours ago
+
+    let(:stale_atom) do
+      {
+        _type: 'atom', id: 'TSV1', status: 'in_progress',
+        assignee: 'agent-1', updated_at: three_hours_ago.utc.iso8601
+      }
+    end
+
+    let(:fresh_atom) do
+      {
+        _type: 'atom', id: 'TSV2', status: 'in_progress',
+        assignee: 'agent-2', updated_at: one_hour_ago.utc.iso8601
+      }
+    end
+
+    let(:open_atom) do
+      {
+        _type: 'atom', id: 'TSV3', status: 'open',
+        assignee: nil, updated_at: three_hours_ago.utc.iso8601
+      }
+    end
+
+    before do
+      allow(File).to receive(:exist?).with(data_file).and_return(true)
+    end
+
+    it 'returns in_progress atoms with updated_at before threshold' do
+      allow(File).to receive(:foreach).with(data_file)
+        .and_yield("#{JSON.generate(stale_atom)}\n")
+        .and_yield("#{JSON.generate(fresh_atom)}\n")
+
+      result = syncer.stale_claims(updated_before: threshold)
+
+      expect(result.size).to eq(1)
+      expect(result.first[:id]).to eq('TSV1')
+    end
+
+    it 'excludes atoms in open status even if old' do
+      allow(File).to receive(:foreach).with(data_file)
+        .and_yield("#{JSON.generate(open_atom)}\n")
+
+      result = syncer.stale_claims(updated_before: threshold)
+
+      expect(result).to be_empty
+    end
+
+    it 'excludes atoms with updated_at after the threshold' do
+      allow(File).to receive(:foreach).with(data_file)
+        .and_yield("#{JSON.generate(fresh_atom)}\n")
+
+      result = syncer.stale_claims(updated_before: threshold)
+
+      expect(result).to be_empty
+    end
+
+    it 'returns empty array when data file does not exist' do
+      allow(File).to receive(:exist?).with(data_file).and_return(false)
+
+      result = syncer.stale_claims(updated_before: threshold)
+
+      expect(result).to eq([])
+    end
+
+    it 'skips records without updated_at timestamp' do
+      atom_no_timestamp = stale_atom.reject { |k, _| k == :updated_at }
+      allow(File).to receive(:foreach).with(data_file)
+        .and_yield("#{JSON.generate(atom_no_timestamp)}\n")
+
+      result = syncer.stale_claims(updated_before: threshold)
+
+      expect(result).to be_empty
+    end
+
+    it 'handles malformed JSON lines gracefully' do
+      allow(File).to receive(:foreach).with(data_file)
+        .and_yield("not valid json\n")
+        .and_yield("#{JSON.generate(stale_atom)}\n")
+
+      result = syncer.stale_claims(updated_before: threshold)
+
+      expect(result.size).to eq(1)
+      expect(result.first[:id]).to eq('TSV1')
+    end
+
+    it 'handles invalid timestamp formats gracefully' do
+      atom_bad_timestamp = stale_atom.merge(updated_at: 'not-a-timestamp')
+      allow(File).to receive(:foreach).with(data_file)
+        .and_yield("#{JSON.generate(atom_bad_timestamp)}\n")
+
+      result = syncer.stale_claims(updated_before: threshold)
+
+      expect(result).to be_empty
+    end
+  end
+
+  describe '#release_stale_claims' do
+    let(:data_file) { "#{worktree_path}/.eluent/data.jsonl" }
+    let(:three_hours_ago) { frozen_time - (3 * 3600) }
+    let(:threshold) { frozen_time - (2 * 3600) }
+
+    let(:stale_atom1) do
+      {
+        _type: 'atom', id: 'TSV1', status: 'in_progress',
+        assignee: 'agent-1', updated_at: three_hours_ago.utc.iso8601
+      }
+    end
+
+    let(:stale_atom2) do
+      {
+        _type: 'atom', id: 'TSV2', status: 'in_progress',
+        assignee: 'agent-2', updated_at: three_hours_ago.utc.iso8601
+      }
+    end
+
+    before do
+      allow(File).to receive(:exist?).with(data_file).and_return(true)
+      allow(File).to receive(:foreach).with(data_file)
+        .and_yield("#{JSON.generate(stale_atom1)}\n")
+      allow(File).to receive(:readlines).with(data_file)
+        .and_return(["#{JSON.generate(stale_atom1)}\n"])
+      allow(File).to receive(:write).with(/\.tmp$/, anything)
+      allow(File).to receive(:rename)
+      allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
+    end
+
+    it 'returns IDs of released atoms' do
+      result = syncer.release_stale_claims(updated_before: threshold)
+
+      expect(result).to eq(['TSV1'])
+    end
+
+    it 'updates stale atoms to open status with nil assignee' do
+      temp_file = "#{data_file}.#{Process.pid}.tmp"
+      expect(File).to receive(:write).with(temp_file, anything) do |_, content|
+        record = JSON.parse(content.strip, symbolize_names: true)
+        expect(record[:status]).to eq('open')
+        expect(record[:assignee]).to be_nil
+      end
+
+      syncer.release_stale_claims(updated_before: threshold)
+    end
+
+    it 'commits with descriptive message for single release' do
+      allow(git_adapter).to receive(:run_git_in_worktree)
+        .with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
+
+      expect(git_adapter).to receive(:run_git_in_worktree).with(
+        worktree_path, 'commit', '-m', 'Auto-release stale claim on TSV1 (was: agent-1)'
+      )
+
+      syncer.release_stale_claims(updated_before: threshold)
+    end
+
+    it 'commits with summary message for 2-5 releases' do
+      allow(File).to receive(:foreach).with(data_file)
+        .and_yield("#{JSON.generate(stale_atom1)}\n")
+        .and_yield("#{JSON.generate(stale_atom2)}\n")
+      allow(File).to receive(:readlines).with(data_file)
+        .and_return(["#{JSON.generate(stale_atom1)}\n", "#{JSON.generate(stale_atom2)}\n"])
+      allow(git_adapter).to receive(:run_git_in_worktree)
+        .with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
+
+      expect(git_adapter).to receive(:run_git_in_worktree).with(
+        worktree_path, 'commit', '-m', 'Auto-release 2 stale claims: TSV1, TSV2'
+      )
+
+      syncer.release_stale_claims(updated_before: threshold)
+    end
+
+    it 'commits with truncated message for 6+ releases' do
+      atoms = (1..6).map do |i|
+        { _type: 'atom', id: "TSV#{i}", status: 'in_progress',
+          assignee: "agent-#{i}", updated_at: three_hours_ago.utc.iso8601 }
+      end
+
+      allow(File).to receive(:foreach).with(data_file) do |_, &block|
+        atoms.each { |a| block.call("#{JSON.generate(a)}\n") }
+      end
+      allow(File).to receive(:readlines).with(data_file)
+        .and_return(atoms.map { |a| "#{JSON.generate(a)}\n" })
+      allow(git_adapter).to receive(:run_git_in_worktree)
+        .with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
+
+      expect(git_adapter).to receive(:run_git_in_worktree).with(
+        worktree_path, 'commit', '-m', 'Auto-release 6 stale claims: TSV1, TSV2, TSV3, ...'
+      )
+
+      syncer.release_stale_claims(updated_before: threshold)
+    end
+
+    it 'returns empty array when no stale claims found' do
+      allow(File).to receive(:foreach).with(data_file).and_return([].each)
+
+      result = syncer.release_stale_claims(updated_before: threshold)
+
+      expect(result).to eq([])
+    end
+
+    it 'does not commit when no stale claims found' do
+      allow(File).to receive(:foreach).with(data_file).and_return([].each)
+      expect(git_adapter).not_to receive(:run_git_in_worktree).with(worktree_path, 'commit', '-m', anything)
+
+      syncer.release_stale_claims(updated_before: threshold)
+    end
+  end
+
+  describe '#heartbeat' do
+    let(:data_file) { "#{worktree_path}/.eluent/data.jsonl" }
+    let(:atom_id) { 'TSV4' }
+    let(:agent_id) { 'agent-1' }
+    let(:claimed_atom) do
+      { _type: 'atom', id: atom_id, status: 'in_progress', assignee: agent_id }
+    end
+
+    before do
+      # Worktree state checks
+      allow(Dir).to receive(:exist?).with(worktree_path).and_return(true)
+      allow(File).to receive(:exist?).with("#{worktree_path}/.git").and_return(true)
+      allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path, branch: branch)])
+
+      # Pull operations (fetch + reset)
+      allow(git_adapter).to receive(:fetch_branch)
+      allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
+
+      # Push operation
+      allow(git_adapter).to receive(:push_branch)
+
+      # File operations
+      allow(File).to receive(:exist?).with(data_file).and_return(true)
+      allow(File).to receive(:foreach).with(data_file)
+        .and_yield("#{JSON.generate(claimed_atom)}\n")
+      allow(File).to receive(:readlines).with(data_file)
+        .and_return(["#{JSON.generate(claimed_atom)}\n"])
+      allow(File).to receive(:write).with(/\.tmp$/, anything)
+      allow(File).to receive(:rename)
+    end
+
+    it 'succeeds for claimed atoms and returns the assignee' do
+      allow(git_adapter).to receive(:run_git_in_worktree)
+        .with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
+
+      result = syncer.heartbeat(atom_id: atom_id)
+
+      expect(result.success).to be true
+      expect(result.claimed_by).to eq(agent_id)
+    end
+
+    it 'pulls latest state before updating' do
+      allow(git_adapter).to receive(:run_git_in_worktree)
+        .with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
+
+      expect(git_adapter).to receive(:fetch_branch).with(remote: remote, branch: branch)
+
+      syncer.heartbeat(atom_id: atom_id)
+    end
+
+    it 'pushes changes after updating' do
+      allow(git_adapter).to receive(:run_git_in_worktree)
+        .with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
+
+      expect(git_adapter).to receive(:push_branch).with(remote: remote, branch: branch)
+
+      syncer.heartbeat(atom_id: atom_id)
+    end
+
+    it 'updates the timestamp without changing other fields' do
+      temp_file = "#{data_file}.#{Process.pid}.tmp"
+      allow(git_adapter).to receive(:run_git_in_worktree)
+        .with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
+
+      expect(File).to receive(:write).with(temp_file, anything) do |_, content|
+        record = JSON.parse(content.strip, symbolize_names: true)
+        expect(record[:status]).to eq('in_progress')
+        expect(record[:assignee]).to eq(agent_id)
+        expect(record[:updated_at]).to eq(frozen_time.utc.iso8601)
+      end
+
+      syncer.heartbeat(atom_id: atom_id)
+    end
+
+    it 'commits with heartbeat message' do
+      allow(git_adapter).to receive(:run_git_in_worktree)
+        .with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
+
+      expect(git_adapter).to receive(:run_git_in_worktree).with(
+        worktree_path, 'commit', '-m', "Heartbeat for #{atom_id}"
+      )
+
+      syncer.heartbeat(atom_id: atom_id)
+    end
+
+    it 'fails when atom_id is nil' do
+      result = syncer.heartbeat(atom_id: nil)
+
+      expect(result.success).to be false
+      expect(result.error).to include('atom_id cannot be nil or empty')
+    end
+
+    it 'fails when atom_id is empty' do
+      result = syncer.heartbeat(atom_id: '')
+
+      expect(result.success).to be false
+      expect(result.error).to include('atom_id cannot be nil or empty')
+    end
+
+    it 'fails when atom not found' do
+      allow(File).to receive(:foreach).with(data_file).and_return([].each)
+
+      result = syncer.heartbeat(atom_id: 'NONEXISTENT')
+
+      expect(result.success).to be false
+      expect(result.error).to include('Atom not found')
+    end
+
+    it 'fails when atom is not in_progress' do
+      open_atom = claimed_atom.merge(status: 'open')
+      allow(File).to receive(:foreach).with(data_file)
+        .and_yield("#{JSON.generate(open_atom)}\n")
+
+      result = syncer.heartbeat(atom_id: atom_id)
+
+      expect(result.success).to be false
+      expect(result.error).to include('Cannot heartbeat atom in open state')
+    end
+
+    it 'fails when atom is in terminal state' do
+      closed_atom = claimed_atom.merge(status: 'closed')
+      allow(File).to receive(:foreach).with(data_file)
+        .and_yield("#{JSON.generate(closed_atom)}\n")
+
+      result = syncer.heartbeat(atom_id: atom_id)
+
+      expect(result.success).to be false
+      expect(result.error).to include('Cannot heartbeat atom in closed state')
+    end
+
+    it 'fails when pull fails' do
+      allow(git_adapter).to receive(:fetch_branch)
+        .and_raise(Eluent::Sync::BranchError.new('Network error'))
+
+      result = syncer.heartbeat(atom_id: atom_id)
+
+      expect(result.success).to be false
+      expect(result.error).to include('Pull failed')
+    end
+
+    it 'fails with max retries when push always fails' do
+      allow(git_adapter).to receive(:run_git_in_worktree)
+        .with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
+      allow(git_adapter).to receive(:push_branch)
+        .and_raise(Eluent::Sync::GitError.new('Push rejected'))
+      allow(syncer).to receive(:sleep)
+
+      result = syncer.heartbeat(atom_id: atom_id)
+
+      expect(result.success).to be false
+      expect(result.error).to eq('Max retries exceeded')
+      expect(result.retries).to eq(5)
+    end
+
+    it 'retries on push conflict and succeeds' do
+      allow(git_adapter).to receive(:run_git_in_worktree)
+        .with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
+
+      # First push fails, second succeeds
+      call_count = 0
+      allow(git_adapter).to receive(:push_branch) do
+        call_count += 1
+        raise Eluent::Sync::GitError, 'Push rejected' if call_count == 1
+      end
+
+      # Stub sleep to avoid waiting
+      allow(syncer).to receive(:sleep)
+
+      result = syncer.heartbeat(atom_id: atom_id)
+
+      expect(result.success).to be true
+      expect(result.retries).to eq(1)
+    end
+
+    it 'does not retry on non-push errors' do
+      allow(File).to receive(:foreach).with(data_file).and_return([].each)
+      expect(syncer).not_to receive(:sleep)
+
+      result = syncer.heartbeat(atom_id: 'NONEXISTENT')
+
+      expect(result.success).to be false
+      expect(result.retries).to eq(0)
+    end
+  end
+
+  describe 'claim_timeout_hours configuration' do
+    it 'accepts claim_timeout_hours parameter' do
+      syncer = described_class.new(
+        repository: repository, git_adapter: git_adapter,
+        global_paths: global_paths, claim_timeout_hours: 4.0
+      )
+
+      expect(syncer.claim_timeout_hours).to eq(4.0)
+    end
+
+    it 'normalizes nil claim_timeout_hours' do
+      syncer = described_class.new(
+        repository: repository, git_adapter: git_adapter,
+        global_paths: global_paths, claim_timeout_hours: nil
+      )
+
+      expect(syncer.claim_timeout_hours).to be_nil
+    end
+
+    it 'normalizes zero claim_timeout_hours to nil (disabled)' do
+      syncer = described_class.new(
+        repository: repository, git_adapter: git_adapter,
+        global_paths: global_paths, claim_timeout_hours: 0
+      )
+
+      expect(syncer.claim_timeout_hours).to be_nil
+    end
+
+    it 'normalizes negative claim_timeout_hours to nil (disabled)' do
+      syncer = described_class.new(
+        repository: repository, git_adapter: git_adapter,
+        global_paths: global_paths, claim_timeout_hours: -5
+      )
+
+      expect(syncer.claim_timeout_hours).to be_nil
+    end
+  end
+
+  describe '#pull_ledger with auto-release' do
+    let(:data_file) { "#{worktree_path}/.eluent/data.jsonl" }
+    let(:three_hours_ago) { frozen_time - (3 * 3600) }
+    let(:stale_atom) do
+      {
+        _type: 'atom', id: 'TSV1', status: 'in_progress',
+        assignee: 'agent-1', updated_at: three_hours_ago.utc.iso8601
+      }
+    end
+
+    let(:syncer_with_timeout) do
+      described_class.new(
+        repository: repository,
+        git_adapter: git_adapter,
+        global_paths: global_paths,
+        remote: remote,
+        branch: branch,
+        clock: clock,
+        claim_timeout_hours: 2.0 # 2 hour timeout
+      )
+    end
+
+    before do
+      allow(Dir).to receive(:exist?).with(worktree_path).and_return(true)
+      allow(File).to receive(:exist?).with("#{worktree_path}/.git").and_return(true)
+      allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path, branch: branch)])
+      allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
+      allow(git_adapter).to receive(:fetch_branch)
+      allow(git_adapter).to receive(:push_branch)
+      allow(File).to receive(:exist?).with(data_file).and_return(true)
+      allow(File).to receive(:foreach).with(data_file)
+        .and_yield("#{JSON.generate(stale_atom)}\n")
+      allow(File).to receive(:readlines).with(data_file)
+        .and_return(["#{JSON.generate(stale_atom)}\n"])
+      allow(File).to receive(:write).with(/\.tmp$/, anything)
+      allow(File).to receive(:rename)
+    end
+
+    it 'auto-releases stale claims when claim_timeout_hours is configured' do
+      expect(syncer_with_timeout).to receive(:warn).with(/auto-released 1 stale claim/)
+
+      syncer_with_timeout.pull_ledger
+    end
+
+    it 'pushes auto-released claims to remote' do
+      allow(syncer_with_timeout).to receive(:warn)
+      expect(git_adapter).to receive(:push_branch).with(remote: remote, branch: branch)
+
+      syncer_with_timeout.pull_ledger
+    end
+
+    it 'logs warning when push fails but pull still succeeds' do
+      allow(git_adapter).to receive(:push_branch)
+        .and_raise(Eluent::Sync::GitError.new('Push rejected'))
+
+      expect(syncer_with_timeout).to receive(:warn).with(/auto-released 1 stale claim/)
+      expect(syncer_with_timeout).to receive(:warn).with(/failed to push auto-released claims/)
+
+      result = syncer_with_timeout.pull_ledger
+      expect(result.success).to be true
+    end
+
+    it 'does not auto-release when claim_timeout_hours is nil' do
+      expect(syncer).not_to receive(:release_stale_claims)
+
+      syncer.pull_ledger
+    end
+
+    it 'does not warn when no stale claims are found' do
+      allow(File).to receive(:foreach).with(data_file).and_return([].each)
+      expect(syncer_with_timeout).not_to receive(:warn)
+
+      syncer_with_timeout.pull_ledger
+    end
+
+    it 'does not push when no stale claims are found' do
+      allow(File).to receive(:foreach).with(data_file).and_return([].each)
+      # Should only call push_branch for the initial commit, not for auto-release
+      expect(git_adapter).not_to receive(:push_branch)
+
+      syncer_with_timeout.pull_ledger
+    end
+  end
+
+  describe '#release_stale_claims batch efficiency' do
+    let(:data_file) { "#{worktree_path}/.eluent/data.jsonl" }
+    let(:three_hours_ago) { frozen_time - (3 * 3600) }
+    let(:threshold) { frozen_time - (2 * 3600) }
+
+    let(:stale_atoms) do
+      (1..10).map do |i|
+        {
+          _type: 'atom', id: "TSV#{i}", status: 'in_progress',
+          assignee: "agent-#{i}", updated_at: three_hours_ago.utc.iso8601
+        }
+      end
+    end
+
+    before do
+      allow(File).to receive(:exist?).with(data_file).and_return(true)
+      allow(File).to receive(:foreach).with(data_file) do |_, &block|
+        stale_atoms.each { |atom| block.call("#{JSON.generate(atom)}\n") }
+      end
+      allow(File).to receive(:readlines).with(data_file)
+        .and_return(stale_atoms.map { |a| "#{JSON.generate(a)}\n" })
+      allow(File).to receive(:write).with(/\.tmp$/, anything)
+      allow(File).to receive(:rename)
+      allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
+    end
+
+    it 'releases all stale atoms in single file write' do
+      # Should only write to temp file once (batch operation)
+      write_count = 0
+      allow(File).to receive(:write).with(/\.tmp$/, anything) { write_count += 1 }
+
+      syncer.release_stale_claims(updated_before: threshold)
+
+      expect(write_count).to eq(1)
+    end
+
+    it 'returns all released atom IDs' do
+      result = syncer.release_stale_claims(updated_before: threshold)
+
+      expect(result.size).to eq(10)
+      expect(result).to eq((1..10).map { |i| "TSV#{i}" })
+    end
+  end
 end
 
 # ==============================================================================

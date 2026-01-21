@@ -19,9 +19,9 @@ This document tracks progress towards completing the Ledger Branch feature defin
 | Phase 7: Daemon Integration | Complete | 100% |
 | Phase 8: ExecutionLoop Integration | Complete | 100% |
 | Phase 9: Stale Worktree Recovery | Complete | 100% |
-| Phase 10: Stale Claim Management | Not Started | 0% |
+| Phase 10: Stale Claim Management | Complete | 100% |
 
-**Current State**: Phase 8 complete. Ready to start Phase 10.
+**Current State**: All phases complete. Ready for integration testing.
 
 ---
 
@@ -346,15 +346,36 @@ Auto-release stale claims from crashed agents.
 
 ### Implementation
 
-- [ ] `lib/eluent/sync/ledger_syncer.rb` — Add:
-  - [ ] `#release_stale_claims(older_than:)`
-  - [ ] `#stale_claims(older_than:)`
-  - [ ] `#heartbeat(atom_id:)` (optional)
-  - [ ] Auto-release during `#pull_ledger` when `claim_timeout_hours` configured
+- [x] `lib/eluent/sync/ledger_syncer.rb` — Add:
+  - [x] `#release_stale_claims(updated_before:)` - releases claims with updated_at before threshold
+  - [x] `#stale_claims(updated_before:)` - query-only version, returns stale atoms
+  - [x] `#heartbeat(atom_id:)` - updates timestamp without changing state
+  - [x] `claim_timeout_hours` parameter in `#initialize`
+  - [x] Auto-release during `#pull_ledger` when `claim_timeout_hours` configured
+- [x] `lib/eluent/sync/concerns/ledger_atom_operations.rb` — Add:
+  - [x] `#touch_atom_timestamp(atom_id)` - updates only updated_at field
 
 ### Specs
 
-- [ ] `spec/eluent/sync/ledger_syncer_spec.rb` — Stale claim management specs
+- [x] `spec/eluent/sync/ledger_syncer_spec.rb` — Stale claim management specs (123 examples, 0 failures)
+  - [x] `#stale_claims` returns in_progress atoms with updated_at before threshold
+  - [x] `#stale_claims` excludes open atoms, fresh atoms, malformed records
+  - [x] `#release_stale_claims` updates stale atoms and commits
+  - [x] `#release_stale_claims` generates descriptive commit messages
+  - [x] `#heartbeat` updates timestamp for claimed atoms
+  - [x] `claim_timeout_hours` normalization (nil/0/negative → disabled)
+  - [x] Auto-release integration with `#pull_ledger`
+
+### Implementation Notes
+
+- Stale detection uses `updated_at` timestamp comparison against configurable threshold
+- `claim_timeout_hours` defaults to nil (disabled); set via config or constructor
+- Auto-release happens after `pull_ledger` fetches remote state, before returning
+- Released claims are logged via `warn` for auditability
+- Commit messages identify released atoms and their previous assignees (truncated for 6+ releases)
+- Heartbeat allows long-running agents to prevent false-positive stale detection
+- Any agent can heartbeat any in_progress atom (cooperative design)
+- Recommended heartbeat interval: `claim_timeout_hours / 2`
 
 ---
 
