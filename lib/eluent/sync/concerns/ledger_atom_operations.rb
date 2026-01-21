@@ -75,7 +75,7 @@ module Eluent
         # Finds an atom record by ID in the worktree's data file.
         #
         # Scans the JSONL file line by line for memory efficiency on large ledgers.
-        # Malformed JSON lines are skipped silently to allow partial recovery.
+        # Malformed JSON lines are logged at debug level and skipped to allow partial recovery.
         #
         # @param atom_id [String] the atom identifier to find
         # @return [Hash, nil] the atom record with symbolized keys, or nil if not found
@@ -83,10 +83,13 @@ module Eluent
           data_file = File.join(worktree_ledger_dir, 'data.jsonl')
           return nil unless File.exist?(data_file)
 
+          line_number = 0
           File.foreach(data_file) do |line|
+            line_number += 1
             record = JSON.parse(line, symbolize_names: true)
             return record if record[:_type] == 'atom' && record[:id] == atom_id
-          rescue JSON::ParserError
+          rescue JSON::ParserError => e
+            warn "[LedgerSyncer] Skipping malformed JSON at #{data_file}:#{line_number}: #{e.message}" if $DEBUG
             next
           end
           nil
@@ -126,7 +129,8 @@ module Eluent
           record = record.merge(updates)
           record[:updated_at] = clock.now.utc.iso8601
           "#{JSON.generate(record)}\n"
-        rescue JSON::ParserError
+        rescue JSON::ParserError => e
+          warn "[LedgerSyncer] Preserving malformed JSON line during update: #{e.message}" if $DEBUG
           line # Preserve malformed lines unchanged
         end
 
@@ -165,7 +169,8 @@ module Eluent
           record[:assignee] = nil
           record[:updated_at] = clock.now.utc.iso8601
           "#{JSON.generate(record)}\n"
-        rescue JSON::ParserError
+        rescue JSON::ParserError => e
+          warn "[LedgerSyncer] Preserving malformed JSON line during release: #{e.message}" if $DEBUG
           line
         end
 
@@ -210,7 +215,8 @@ module Eluent
 
           record[:updated_at] = clock.now.utc.iso8601
           ["#{JSON.generate(record)}\n", true]
-        rescue JSON::ParserError
+        rescue JSON::ParserError => e
+          warn "[LedgerSyncer] Preserving malformed JSON line during heartbeat: #{e.message}" if $DEBUG
           [line, false]
         end
       end

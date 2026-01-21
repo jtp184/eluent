@@ -948,8 +948,85 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
   end
 
   describe '#reconcile_offline_claims!' do
-    it 'returns empty array (Phase 4 placeholder - offline claim reconciliation)' do
-      expect(syncer.reconcile_offline_claims!).to eq([])
+    let(:mock_state) { instance_double('Eluent::Sync::LedgerSyncState') }
+
+    it 'returns empty array when state has no offline claims' do
+      allow(mock_state).to receive(:offline_claims?).and_return(false)
+
+      expect(syncer.reconcile_offline_claims!(state: mock_state)).to eq([])
+    end
+
+    context 'with offline claims' do
+      let(:offline_claim) do
+        Eluent::Sync::OfflineClaim.new(
+          atom_id: 'TSV1',
+          agent_id: 'agent-1',
+          claimed_at: frozen_time
+        )
+      end
+      let(:data_file) { "#{worktree_path}/.eluent/data.jsonl" }
+      let(:open_atom) do
+        { _type: 'atom', id: 'TSV1', status: 'open', assignee: nil, updated_at: frozen_time.utc.iso8601 }
+      end
+
+      before do
+        allow(mock_state).to receive(:offline_claims?).and_return(true)
+        allow(mock_state).to receive(:offline_claims).and_return([offline_claim])
+        allow(mock_state).to receive(:clear_offline_claim)
+        allow(mock_state).to receive(:save)
+
+        # Setup for worktree operations
+        allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path, branch: branch)])
+        allow(Dir).to receive(:exist?).with(worktree_path).and_return(true)
+        allow(File).to receive(:exist?).with(File.join(worktree_path, '.git')).and_return(true)
+        allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
+        allow(git_adapter).to receive(:fetch_branch)
+        allow(git_adapter).to receive(:push_branch)
+
+        # Setup for atom operations
+        allow(File).to receive(:exist?).with(data_file).and_return(true)
+        allow(File).to receive(:foreach).with(data_file).and_yield("#{JSON.generate(open_atom)}\n")
+        allow(File).to receive(:readlines).with(data_file).and_return(["#{JSON.generate(open_atom)}\n"])
+        allow(File).to receive(:write)
+        allow(File).to receive(:rename)
+        allow(FileUtils).to receive(:rm_f)
+      end
+
+      it 'attempts to claim each offline claim' do
+        result = syncer.reconcile_offline_claims!(state: mock_state)
+
+        expect(result.size).to eq(1)
+        expect(result.first[:atom_id]).to eq('TSV1')
+        expect(result.first[:success]).to be true
+      end
+
+      it 'clears successfully reconciled claims from state' do
+        expect(mock_state).to receive(:clear_offline_claim).with(atom_id: 'TSV1')
+        expect(mock_state).to receive(:save)
+
+        syncer.reconcile_offline_claims!(state: mock_state)
+      end
+
+      it 'reports conflicts when atom is already claimed by another agent' do
+        claimed_atom = open_atom.merge(status: 'in_progress', assignee: 'other-agent')
+        allow(File).to receive(:foreach).with(data_file).and_yield("#{JSON.generate(claimed_atom)}\n")
+
+        result = syncer.reconcile_offline_claims!(state: mock_state)
+
+        expect(result.first[:success]).to be false
+        expect(result.first[:conflict]).to be true
+      end
+
+      it 'handles atoms deleted remotely' do
+        allow(File).to receive(:foreach).with(data_file).and_return([].each)
+
+        expect(mock_state).to receive(:clear_offline_claim).with(atom_id: 'TSV1')
+
+        result = syncer.reconcile_offline_claims!(state: mock_state)
+
+        expect(result.first[:success]).to be false
+        expect(result.first[:atom_deleted]).to be true
+      end
     end
   end
 
@@ -1442,12 +1519,26 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
       syncer_with_timeout.pull_ledger
     end
 
-    it 'logs warning when push fails but pull still succeeds' do
+    it 'retries and logs failure when push consistently fails' do
       allow(git_adapter).to receive(:push_branch)
         .and_raise(Eluent::Sync::GitError.new('Push rejected'))
 
+      # After max_retries, it should log failure and give up
+      expect(syncer_with_timeout).to receive(:warn).with(/failed to release stale claims after \d+ retries/)
+
+      result = syncer_with_timeout.pull_ledger
+      # Pull still succeeds even if stale claim release fails
+      expect(result.success).to be true
+    end
+
+    it 'succeeds on push retry after initial conflict' do
+      push_attempts = 0
+      allow(git_adapter).to receive(:push_branch) do
+        push_attempts += 1
+        raise Eluent::Sync::GitError.new('Push rejected') if push_attempts < 3
+      end
+
       expect(syncer_with_timeout).to receive(:warn).with(/auto-released 1 stale claim/)
-      expect(syncer_with_timeout).to receive(:warn).with(/failed to push auto-released claims/)
 
       result = syncer_with_timeout.pull_ledger
       expect(result.success).to be true

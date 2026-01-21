@@ -38,9 +38,10 @@ module Eluent
             repository: repository,
             git_adapter: git_adapter,
             global_paths: global_paths,
-            remote: 'origin',
+            remote: sync_config['remote'] || 'origin',
             max_retries: sync_config['claim_retries'] || 5,
-            branch: sync_config['ledger_branch']
+            branch: sync_config['ledger_branch'],
+            claim_timeout_hours: sync_config['claim_timeout_hours']
           )
         end
 

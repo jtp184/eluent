@@ -116,7 +116,7 @@ module Eluent
 
           if result.success
             output_claim_success(atom, offline: result.offline_claim, retries: result.retries)
-          elsif result.error&.include?('already claimed')
+          elsif result.error&.include?('Already claimed')
             exit_already_claimed(result.claimed_by)
           elsif result.error&.include?('Max retries')
             exit_max_retries(result.retries)
@@ -148,11 +148,16 @@ module Eluent
           state.record_offline_claim(
             atom_id: atom.id,
             agent_id: effective_agent_id,
-            claimed_at: Time.now
+            claimed_at: clock.now
           )
           state.save
         rescue StandardError => e
           warn "el: warning: could not record offline claim: #{e.message}"
+        end
+
+        # Time source for timestamps. Override in tests for deterministic behavior.
+        def clock
+          Time
         end
 
         def output_claim_success(atom, offline: false, retries: 0)

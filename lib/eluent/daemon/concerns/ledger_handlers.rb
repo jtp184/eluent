@@ -184,12 +184,18 @@ module Eluent
 
           return no_offline_claims_response(id) unless state.offline_claims?
 
-          results = syncer.reconcile_offline_claims!
+          initial_count = state.offline_claims.size
+          results = syncer.reconcile_offline_claims!(state: state)
+
+          successful = results.count { |r| r[:success] }
+          conflicts = results.count { |r| r[:conflict] }
 
           Protocol.build_success(id: id, data: {
                                    action: 'reconcile',
-                                   offline_claims_count: state.offline_claims.size,
-                                   reconciled: results.size
+                                   offline_claims_count: initial_count,
+                                   reconciled: successful,
+                                   conflicts: conflicts,
+                                   results: results
                                  })
         end
 
@@ -244,7 +250,7 @@ module Eluent
           return claim_success_response(id, atom, result) if result.success
 
           case result.error
-          when /already claimed/
+          when /Already claimed/
             force ? claim_locally(id, repo, atom, agent_id, force, syncer) : claim_conflict_response(id, result)
           when /Max retries/
             max_retries_response(id, result)
@@ -299,10 +305,15 @@ module Eluent
         def record_offline_claim(repo, atom_id, agent_id)
           state = build_ledger_sync_state(repo.paths.root)
           state.load
-          state.record_offline_claim(atom_id: atom_id, agent_id: agent_id, claimed_at: Time.now)
+          state.record_offline_claim(atom_id: atom_id, agent_id: agent_id, claimed_at: clock.now)
           state.save
         rescue StandardError
           nil # Don't fail the claim if we can't record offline claim
+        end
+
+        # Time source for timestamps. Override in tests for deterministic behavior.
+        def clock
+          Time
         end
 
         def default_agent_id
@@ -350,9 +361,10 @@ module Eluent
             repository: repo,
             git_adapter: Sync::GitAdapter.new(repo_path: repo.paths.root),
             global_paths: Storage::GlobalPaths.new(repo_name: config['repo_name']),
-            remote: 'origin',
+            remote: sync_config['remote'] || 'origin',
             max_retries: sync_config['claim_retries'] || DEFAULT_CLAIM_RETRIES,
-            branch: sync_config['ledger_branch']
+            branch: sync_config['ledger_branch'],
+            claim_timeout_hours: sync_config['claim_timeout_hours']
           )
         end
 

@@ -190,8 +190,9 @@ module Eluent
           state = ledger_sync_state.load
           return success('No offline claims to reconcile') unless state.offline_claims?
 
-          results = syncer.reconcile_offline_claims!
-          output_reconcile_results(results, state)
+          initial_count = state.offline_claims.size
+          results = syncer.reconcile_offline_claims!(state: state)
+          output_reconcile_results(results, initial_count)
           0
         end
 
@@ -322,20 +323,28 @@ module Eluent
           end
         end
 
-        def output_reconcile_results(results, state)
-          # Results are placeholder (empty) until Phase 4 integration
-          claims_count = state.offline_claims.size
+        def output_reconcile_results(results, initial_count)
+          successful = results.count { |r| r[:success] }
+          conflicts = results.select { |r| r[:conflict] }
+          errors = results.reject { |r| r[:success] || r[:conflict] || r[:atom_deleted] }
+
           data = {
-            offline_claims: claims_count,
-            reconciled: results.size,
-            conflicts: []
+            offline_claims: initial_count,
+            reconciled: successful,
+            conflicts: conflicts.map { |r| { atom_id: r[:atom_id], error: r[:error] } },
+            errors: errors.map { |r| { atom_id: r[:atom_id], error: r[:error] } }
           }
 
           if @robot_mode
             puts JSON.generate({ status: 'ok', data: data })
           else
-            puts "#{@pastel.green('el:')} #{claims_count} offline claims pending reconciliation"
-            puts '    (reconciliation logic pending - claims will sync on next push)'
+            puts "#{@pastel.green('el:')} Reconciled #{successful}/#{initial_count} offline claims"
+            conflicts.each do |conflict|
+              puts "    #{@pastel.yellow('conflict:')} #{conflict[:atom_id]} - #{conflict[:error]}"
+            end
+            errors.each do |err|
+              puts "    #{@pastel.red('error:')} #{err[:atom_id]} - #{err[:error]}"
+            end
           end
         end
 

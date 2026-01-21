@@ -54,10 +54,6 @@ module Eluent
       SECONDS_PER_HOUR = 3600
       private_constant :SECONDS_PER_HOUR
 
-      # Frozen empty array for reconcile_offline_claims! placeholder
-      EMPTY_ARRAY = [].freeze
-      private_constant :EMPTY_ARRAY
-
       # Result of a claim operation.
       #
       # @!attribute success [Boolean] whether the claim succeeded
@@ -312,9 +308,35 @@ module Eluent
       # attempts to push those claims when connectivity is restored, handling
       # conflicts where another agent claimed the same atom.
       #
-      # @return [Array<Hash>] results for each reconciliation attempt (Phase 4)
-      def reconcile_offline_claims!
-        EMPTY_ARRAY
+      # For each offline claim:
+      # 1. Attempts to claim via normal claim_and_push flow
+      # 2. On success, clears the offline claim from state
+      # 3. On conflict, records the conflict but continues with remaining claims
+      #
+      # @param state [LedgerSyncState] state object containing offline claims
+      # @return [Array<Hash>] results for each reconciliation attempt with keys:
+      #   - :atom_id [String] the atom that was reconciled
+      #   - :success [Boolean] whether reconciliation succeeded
+      #   - :error [String, nil] error message if failed
+      #   - :conflict [Boolean] true if another agent owns the claim
+      def reconcile_offline_claims!(state:)
+        return [] unless state.offline_claims?
+
+        results = []
+        claims_to_clear = []
+
+        state.offline_claims.each do |claim|
+          result = reconcile_single_claim(claim)
+          results << result
+
+          claims_to_clear << claim.atom_id if result[:success] || result[:atom_deleted]
+        end
+
+        # Clear successfully reconciled claims from state
+        claims_to_clear.each { |atom_id| state.clear_offline_claim(atom_id: atom_id) }
+        state.save if claims_to_clear.any?
+
+        results
       end
 
       # ------------------------------------------------------------------
@@ -393,6 +415,25 @@ module Eluent
       private
 
       attr_reader :clock
+
+      # Reconciles a single offline claim.
+      #
+      # @param claim [OfflineClaim] the offline claim to reconcile
+      # @return [Hash] result with :atom_id, :success, :error, :conflict, :atom_deleted
+      def reconcile_single_claim(claim)
+        result = claim_and_push(atom_id: claim.atom_id, agent_id: claim.agent_id)
+
+        if result.success
+          { atom_id: claim.atom_id, success: true, error: nil, conflict: false, atom_deleted: false }
+        elsif result.error&.include?('not found')
+          # Atom was deleted remotely - clear from offline claims
+          { atom_id: claim.atom_id, success: false, error: result.error, conflict: false, atom_deleted: true }
+        elsif result.error&.include?('Already claimed') || result.error&.include?('already claimed')
+          { atom_id: claim.atom_id, success: false, error: result.error, conflict: true, atom_deleted: false }
+        else
+          { atom_id: claim.atom_id, success: false, error: result.error, conflict: false, atom_deleted: false }
+        end
+      end
 
       # Sleeps with exponential backoff and jitter.
       #
@@ -566,12 +607,15 @@ module Eluent
         return [] unless File.exist?(data_file)
 
         stale = []
+        line_number = 0
         File.foreach(data_file) do |line|
+          line_number += 1
           record = JSON.parse(line, symbolize_names: true)
           next unless stale_claim?(record, updated_before)
 
           stale << record
-        rescue JSON::ParserError
+        rescue JSON::ParserError => e
+          warn "[LedgerSyncer] Skipping malformed JSON at #{data_file}:#{line_number}: #{e.message}" if $DEBUG
           next
         end
         stale
@@ -628,24 +672,52 @@ module Eluent
 
       # Releases stale claims if claim_timeout_hours is configured.
       #
-      # Called automatically during pull_ledger. Released atoms are logged
-      # for auditability. Pushes changes to remote to ensure other agents
-      # see the released claims.
+      # Uses optimistic locking with retry to avoid race conditions:
+      # 1. Identify stale claims in current worktree state
+      # 2. Release them and commit
+      # 3. Push to remote
+      # 4. On push conflict, re-pull and retry (stale claims may have changed)
       #
-      # Push failures are logged but don't fail the pull operation—the local
-      # release still helps this agent, and the next pull will retry.
+      # This is called automatically during pull_ledger but is designed to be
+      # safe against concurrent modifications.
       def auto_release_stale_claims
         threshold = stale_threshold_time
         return unless threshold
 
-        released = release_stale_claims(updated_before: threshold)
-        return if released.empty?
+        retries = 0
 
-        warn "el: auto-released #{released.size} stale claim(s): #{released.join(', ')}"
+        loop do
+          stale = find_stale_claims_in_worktree(updated_before: threshold)
+          return if stale.empty?
 
-        # Best-effort push; failure is logged but doesn't fail the pull
-        push_result = push_ledger
-        warn "el: failed to push auto-released claims: #{push_result.error}" unless push_result.success
+          released_ids = stale.map { |atom| atom[:id] }
+          release_atoms_in_worktree(released_ids)
+
+          message = build_release_commit_message(released_ids, stale)
+          commit_ledger_changes(message: message)
+
+          push_result = push_ledger
+          if push_result.success
+            warn "el: auto-released #{released_ids.size} stale claim(s): #{released_ids.join(', ')}"
+            return
+          end
+
+          # Push failed - retry with backoff
+          retries += 1
+          if retries >= max_retries
+            # Discard local changes to avoid inconsistent state on next pull
+            merge_or_reset_ledger
+            warn "el: failed to release stale claims after #{retries} retries"
+            return
+          end
+
+          # Re-pull to get latest state before retrying
+          fetch_ledger_branch
+          merge_or_reset_ledger
+          sleep_with_backoff(retries)
+        end
+      rescue GitError, BranchError, LedgerSyncerError => e
+        warn "el: error releasing stale claims: #{e.message}"
       end
     end
     # rubocop:enable Metrics/ClassLength

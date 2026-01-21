@@ -276,7 +276,7 @@ RSpec.describe Eluent::CLI::Commands::Claim do
       let(:claim_result) do
         Eluent::Sync::LedgerSyncer::ClaimResult.new(
           success: false,
-          error: 'already claimed',
+          error: 'Already claimed by other-agent',
           claimed_by: 'other-agent',
           retries: 0
         )
