@@ -43,8 +43,20 @@ RSpec.describe Eluent::Models::Status do
       expect(described_class[:deferred]).to be_a(described_class)
     end
 
+    it 'includes review' do
+      expect(described_class[:review]).to be_a(described_class)
+    end
+
+    it 'includes testing' do
+      expect(described_class[:testing]).to be_a(described_class)
+    end
+
     it 'includes closed' do
       expect(described_class[:closed]).to be_a(described_class)
+    end
+
+    it 'includes wont_do' do
+      expect(described_class[:wont_do]).to be_a(described_class)
     end
 
     it 'includes discard' do
@@ -74,8 +86,9 @@ RSpec.describe Eluent::Models::Status do
   describe 'discard status' do
     subject(:discard) { described_class[:discard] }
 
-    it 'allows transition from closed' do
-      expect(discard.from).to include(:closed)
+    it 'has no transition restrictions' do
+      expect(discard.from).to be_empty
+      expect(discard.to).to be_empty
     end
   end
 
@@ -128,14 +141,15 @@ RSpec.describe Eluent::Models::Status do
     end
 
     context 'when from has specific values (whitelist)' do
-      subject(:status) { described_class[:discard] }
+      subject(:status) { described_class.new(name: :restricted_from, from: %i[open in_progress]) }
 
       it 'returns true for allowed sources' do
-        expect(status.can_transition_from?(:closed)).to be true
+        expect(status.can_transition_from?(:open)).to be true
+        expect(status.can_transition_from?(:in_progress)).to be true
       end
 
       it 'returns false for disallowed sources' do
-        expect(status.can_transition_from?(:open)).to be false
+        expect(status.can_transition_from?(:closed)).to be false
       end
     end
   end

@@ -97,6 +97,13 @@ output = el "create -t 'Q1 Authentication Milestone' --type epic -p 0", capture:
 epic_id = output[/Created \w+ (\w+):/, 1]
 puts "  -> epic ID: #{epic_id}"
 
+step 'Create a discovery item for research work'
+output = el "create -t 'Research OAuth2 providers' " \
+            "-d 'Investigate available OAuth2 providers and their Ruby SDKs' --type discovery -p 2",
+            capture: true
+discovery_id = output[/Created \w+ (\w+):/, 1]
+puts "  -> discovery ID: #{discovery_id}"
+
 step 'Create an ephemeral task (local-only, not synced)'
 output = el "create -t 'Local debugging notes' --type task -e", capture: true
 ephemeral_id = output[/Created \w+ (\w+):/, 1]
@@ -111,6 +118,9 @@ el 'list'
 
 step 'List only bugs'
 el 'list --type bug'
+
+step 'List discovery items'
+el 'list --type discovery'
 
 step 'List by label (backend)'
 el 'list -l backend'
@@ -163,6 +173,12 @@ section '7. UPDATE ATOMS'
 step 'Update task status to in_progress'
 el "update #{task1_id} -s in_progress"
 
+step 'Move discovery to review status'
+el "update #{discovery_id} -s review"
+
+step 'Move task to testing status'
+el "update #{task2_id} -s testing"
+
 step 'Add labels to existing task'
 el "update #{task2_id} -l urgent -l sprint-1"
 
@@ -197,6 +213,12 @@ el "reopen #{bug_id}"
 
 step 'Show reopened bug'
 el "show #{bug_id}"
+
+step 'Mark discovery as wont_do (decided not to pursue)'
+el "update #{discovery_id} -s wont_do"
+
+step 'Show discovery with wont_do status'
+el "show #{discovery_id}"
 
 # ============================================================
 section '9. CONFIGURATION'
@@ -856,6 +878,8 @@ end
 
 puts "\n\e[35mFeatures demonstrated:\e[0m"
 puts '  1-11:  Core atom/bond/comment management'
+puts '         Issue types: task, feature, bug, artifact, discovery, epic'
+puts '         Statuses: open, in_progress, review, testing, blocked, deferred, closed, wont_do, discard'
 puts '  12-15: Dependencies, ready queue, soft delete, formulas'
 puts '  16-18: Compaction, plugins, AI agent integration'
 puts '  19-24: Ledger sync (atomic claims, offline mode, reconciliation)'

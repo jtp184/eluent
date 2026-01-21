@@ -70,8 +70,8 @@ Atoms are the fundamental unit of work. Each atom has:
 | `id` | Unique identifier (UUID-based, supports short prefixes) |
 | `title` | Brief description of the work |
 | `description` | Detailed explanation (optional) |
-| `status` | Current state: `open`, `in_progress`, `blocked`, `deferred`, `closed`, `discard` |
-| `issue_type` | Category: `task`, `feature`, `bug`, `artifact`, `epic`, `formula` |
+| `status` | Current state: `open`, `in_progress`, `blocked`, `review`, `testing`, `deferred`, `closed`, `wont_do`, `discard` |
+| `issue_type` | Category: `task`, `feature`, `bug`, `artifact`, `discovery`, `epic`, `formula` |
 | `priority` | 0 (critical) to 5 (none), default 2 |
 | `assignee` | Who's working on it |
 | `labels` | Arbitrary tags for classification |
@@ -101,13 +101,15 @@ Bonds are dependencies between atoms. They come in two categories:
 ### Status Lifecycle
 
 ```
-open → in_progress → closed
-  ↓         ↓           ↑
-  └─────blocked─────────┘
+open → in_progress → review → testing → closed
+  ↓         ↓           ↓         ↓        ↑
+  └───────blocked───────┴─────────┴────────┘
   ↓
 deferred (with defer_until)
-  ↓
-discard (soft delete)
+
+Terminal states:
+  wont_do (decided not to do)
+  discard (soft delete)
 ```
 
 ### Issue Types
@@ -117,7 +119,8 @@ discard (soft delete)
 | `task` | Default work item |
 | `feature` | New functionality |
 | `bug` | Defect to fix |
-| `artifact` | Non-actionable record |
+| `artifact` | Deliverable document or non-code output |
+| `discovery` | Research or investigation that produces related tickets |
 | `epic` | Abstract container (cannot be closed directly) |
 | `formula` | Template definition (abstract) |
 

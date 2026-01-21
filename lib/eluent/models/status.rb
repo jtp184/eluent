@@ -22,9 +22,12 @@ module Eluent
         open: { from: [], to: [] },
         in_progress: { from: [], to: [] },
         blocked: { from: [], to: [] },
+        review: { from: [], to: [] },
+        testing: { from: [], to: [] },
         deferred: { from: [], to: [] },
         closed: { from: [], to: [] },
-        discard: { from: %i[closed], to: [] }
+        wont_do: { from: [], to: [] },
+        discard: { from: [], to: [] }
       }.freeze
 
       attr_reader :name, :from, :to

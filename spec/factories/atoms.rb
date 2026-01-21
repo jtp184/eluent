@@ -41,6 +41,14 @@ FactoryBot.define do
       defer_until { Time.now.utc + 86_400 } # 1 day from now
     end
 
+    trait :review do
+      status { :review }
+    end
+
+    trait :testing do
+      status { :testing }
+    end
+
     trait :closed do
       status { :closed }
       close_reason { 'completed' }
@@ -48,7 +56,12 @@ FactoryBot.define do
 
     trait :discarded do
       status { :discard }
-      close_reason { 'wont_fix' }
+      close_reason { 'wont_do' }
+    end
+
+    trait :wont_do do
+      status { :wont_do }
+      close_reason { 'wont_do' }
     end
 
     # Issue type traits
@@ -68,6 +81,11 @@ FactoryBot.define do
 
     trait :artifact do
       issue_type { :artifact }
+    end
+
+    trait :discovery do
+      issue_type { :discovery }
+      title { "Discovery: #{Faker::Lorem.sentence(word_count: 3)}" }
     end
 
     trait :epic do

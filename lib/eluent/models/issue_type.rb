@@ -11,6 +11,7 @@ module Eluent
         bug: {},
         task: {},
         artifact: {},
+        discovery: {},
         epic: { abstract: true },
         formula: { abstract: true }
       }.freeze

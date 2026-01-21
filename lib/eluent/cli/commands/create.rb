@@ -29,7 +29,7 @@ module Eluent
 
         option :type do
           long '--type TYPE'
-          desc 'Issue type (task, feature, bug, artifact, epic)'
+          desc 'Issue type (task, feature, bug, artifact, discovery, epic)'
           default 'task'
         end
 
