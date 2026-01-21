@@ -1,6 +1,6 @@
 # Ledger Branch Implementation Progress
 
-**Last Updated**: 2026-01-21
+**Last Updated**: 2026-01-20
 
 This document tracks progress towards completing the Ledger Branch feature defined in `LEDGER_BRANCH.md`.
 
@@ -17,11 +17,11 @@ This document tracks progress towards completing the Ledger Branch feature defin
 | Phase 5: ConfigLoader Updates | Complete | 100% |
 | Phase 6: CLI Commands | Complete | 100% |
 | Phase 7: Daemon Integration | Complete | 100% |
-| Phase 8: ExecutionLoop Integration | Not Started | 0% |
+| Phase 8: ExecutionLoop Integration | Complete | 100% |
 | Phase 9: Stale Worktree Recovery | Complete | 100% |
 | Phase 10: Stale Claim Management | Not Started | 0% |
 
-**Current State**: Phase 7 complete. Ready to start Phase 8.
+**Current State**: Phase 8 complete. Ready to start Phase 10.
 
 ---
 
@@ -282,18 +282,42 @@ Integrate `LedgerSyncer` for atomic claims.
 
 ### Implementation
 
-- [ ] `lib/eluent/agents/execution_loop.rb` — Add:
-  - [ ] `ClaimOutcome` data type
-  - [ ] `ledger_syncer` dependency in `#initialize`
-  - [ ] `#claim_atom(atom)` method
-  - [ ] `#sync_after_work` method
-  - [ ] `#release_claim_on_failure(atom)` method
-  - [ ] Fallback to local claiming when syncer unavailable
-  - [ ] Offline claim recording
+- [x] `lib/eluent/agents/execution_loop.rb` — Add:
+  - [x] `ClaimOutcome` data type (success, reason, local_only, fallback, error)
+  - [x] `ledger_syncer` dependency in `#initialize`
+  - [x] `ledger_sync_state` dependency for offline claim recording
+  - [x] `sync_config` parameter for offline_mode setting
+  - [x] `#claim_atom(atom)` method with ledger sync integration
+  - [x] `#claim_with_ledger_sync(atom)` for remote atomic claims
+  - [x] `#claim_locally(atom)` for local-only claiming
+  - [x] `#handle_ledger_sync_failure(atom, error)` with offline_mode handling
+  - [x] `#sync_after_work(work_succeeded)` method
+  - [x] `#sync_ledger_after_work` for ledger push and sync to main
+  - [x] `#release_claim_on_failure(atom)` method using ensure for guaranteed local release
+  - [x] Fallback to local claiming when syncer unavailable
+  - [x] Offline claim recording when sync fails with 'local' mode
 
 ### Specs
 
-- [ ] `spec/eluent/agents/execution_loop_spec.rb` — Extended specs for ledger integration
+- [x] `spec/eluent/agents/execution_loop_spec.rb` — Extended specs for ledger integration (40 examples, 0 failures)
+  - [x] `ClaimOutcome` data type specs
+  - [x] `#claim_atom` with ledger syncer available
+  - [x] `#claim_atom` with ledger syncer unavailable (fallback)
+  - [x] `#claim_atom` with already-claimed atoms
+  - [x] `#claim_atom` with LedgerSyncerError and offline_mode handling
+  - [x] `#release_claim_on_failure` with/without ledger syncer
+  - [x] `#sync_after_work` with ledger sync
+  - [x] Full run integration test with ledger sync
+
+### Implementation Notes
+
+- `ClaimOutcome` captures claim result: `local_only` (not synced to remote) and `fallback` (sync attempted but failed)
+- When ledger syncer is available, claims go through atomic `claim_and_push` with retry
+- Repository is reloaded after successful remote claim to pick up changes from other agents
+- Offline mode 'local' (default) falls back to local claiming on sync failure and records offline claim
+- Offline mode 'fail' returns failure immediately without fallback
+- `sync_after_work` pushes ledger changes then syncs to main working tree
+- Release on failure uses `ensure` to guarantee local release regardless of remote outcome
 
 ---
 
