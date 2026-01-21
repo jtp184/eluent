@@ -787,11 +787,11 @@ step 'Try to claim a closed atom (exit code 5)'
 # Close an atom first
 el "close #{offline_task_id} -r 'Completed'"
 el "claim #{offline_task_id} --agent-id test-agent"
-puts "  -> Exit code indicates atom is in terminal state"
+puts '  -> Exit code indicates atom is in terminal state'
 
 step 'Try to claim a non-existent atom (exit code 4)'
 el 'claim NOTEXIST --agent-id test-agent'
-puts "  -> Exit code indicates atom not found"
+puts '  -> Exit code indicates atom not found'
 
 # ============================================================
 section '24. LEDGER CLEANUP'

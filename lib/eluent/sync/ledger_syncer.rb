@@ -197,7 +197,10 @@ module Eluent
 
           loop do
             pull_result = pull_ledger
-            return ClaimResult.new(success: false, error: pull_result.error, retries: retries) unless pull_result.success
+            unless pull_result.success
+              return ClaimResult.new(success: false, error: pull_result.error,
+                                     retries: retries)
+            end
 
             claim_result = attempt_claim(atom_id: atom_id, agent_id: agent_id)
             return claim_result.with(retries: retries) unless claim_result.success
@@ -452,8 +455,8 @@ module Eluent
       #
       # @yield Block to execute while holding the lock
       # @return [Object] Result of the block
-      def with_worktree_lock(&block)
-        worktree_monitor.synchronize(&block)
+      def with_worktree_lock(&)
+        worktree_monitor.synchronize(&)
       end
 
       # Reconciles a single offline claim.

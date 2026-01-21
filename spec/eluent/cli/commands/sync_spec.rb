@@ -201,13 +201,10 @@ RSpec.describe Eluent::CLI::Commands::Sync do
       before do
         allow(Eluent::Storage::GlobalPaths).to receive(:new).and_return(global_paths)
         allow(Eluent::Sync::LedgerSyncState).to receive(:new).and_return(ledger_sync_state)
-        allow(ledger_sync_state).to receive(:load).and_return(ledger_sync_state)
-        allow(ledger_sync_state).to receive(:last_pull_at).and_return(nil)
-        allow(ledger_sync_state).to receive(:last_push_at).and_return(nil)
-        allow(ledger_sync_state).to receive(:ledger_head).and_return(nil)
-        allow(ledger_sync_state).to receive(:valid?).and_return(false)
-        allow(ledger_sync_state).to receive(:offline_claims).and_return([])
-        allow(ledger_sync_state).to receive(:offline_claims?).and_return(false)
+        allow(ledger_sync_state).to receive_messages(
+          load: ledger_sync_state, last_pull_at: nil, last_push_at: nil, ledger_head: nil,
+          valid?: false, offline_claims: [], offline_claims?: false
+        )
       end
 
       it 'returns 0' do
@@ -250,15 +247,11 @@ RSpec.describe Eluent::CLI::Commands::Sync do
 
         allow(global_paths).to receive(:sync_worktree_dir).and_return('/home/user/.eluent/testrepo/.sync-worktree')
 
-        allow(ledger_sync_state).to receive(:load).and_return(ledger_sync_state)
-        allow(ledger_sync_state).to receive(:exists?).and_return(false)
         allow(ledger_sync_state).to receive(:reset!)
-        allow(ledger_sync_state).to receive(:last_pull_at).and_return(nil)
-        allow(ledger_sync_state).to receive(:last_push_at).and_return(nil)
-        allow(ledger_sync_state).to receive(:ledger_head).and_return(nil)
-        allow(ledger_sync_state).to receive(:valid?).and_return(false)
-        allow(ledger_sync_state).to receive(:offline_claims).and_return([])
-        allow(ledger_sync_state).to receive(:offline_claims?).and_return(false)
+        allow(ledger_sync_state).to receive_messages(
+          load: ledger_sync_state, exists?: false, last_pull_at: nil, last_push_at: nil,
+          ledger_head: nil, valid?: false, offline_claims: [], offline_claims?: false
+        )
       end
 
       describe '--setup-ledger' do
@@ -284,34 +277,27 @@ RSpec.describe Eluent::CLI::Commands::Sync do
           expect(parsed['data']['created_worktree']).to be true
         end
 
-        context 'when setup fails' do
-          let(:setup_result) do
-            Eluent::Sync::LedgerSyncer::SetupResult.new(
-              success: false,
-              error: 'Failed to create branch'
-            )
-          end
+        it 'returns 1 when setup fails' do
+          failed_result = Eluent::Sync::LedgerSyncer::SetupResult.new(success: false, error: 'Failed to create branch')
+          allow(ledger_syncer).to receive(:setup!).and_return(failed_result)
+          expect(run_command('--setup-ledger', robot_mode: true)).to eq(1)
+        end
 
-          it 'returns 1' do
-            expect(run_command('--setup-ledger', robot_mode: true)).to eq(1)
-          end
+        it 'outputs error when setup fails' do
+          failed_result = Eluent::Sync::LedgerSyncer::SetupResult.new(success: false, error: 'Failed to create branch')
+          allow(ledger_syncer).to receive(:setup!).and_return(failed_result)
+          output = capture_stdout { run_command('--setup-ledger', robot_mode: true) }
+          parsed = JSON.parse(output)
 
-          it 'outputs error' do
-            output = capture_stdout { run_command('--setup-ledger', robot_mode: true) }
-            parsed = JSON.parse(output)
-
-            expect(parsed['status']).to eq('error')
-            expect(parsed['error']['code']).to eq('SETUP_FAILED')
-          end
+          expect(parsed['status']).to eq('error')
+          expect(parsed['error']['code']).to eq('SETUP_FAILED')
         end
       end
 
       describe '--ledger-only' do
         before do
-          allow(ledger_syncer).to receive(:available?).and_return(true)
-          allow(ledger_syncer).to receive(:pull_ledger).and_return(sync_result)
-          allow(ledger_syncer).to receive(:push_ledger).and_return(sync_result)
-          allow(ledger_syncer).to receive(:sync_to_main).and_return(sync_result)
+          allow(ledger_syncer).to receive_messages(available?: true, pull_ledger: sync_result,
+                                                   push_ledger: sync_result, sync_to_main: sync_result)
         end
 
         it 'performs ledger pull and push' do
@@ -326,18 +312,13 @@ RSpec.describe Eluent::CLI::Commands::Sync do
           expect(run_command('--ledger-only', robot_mode: true)).to eq(0)
         end
 
-        context 'when syncer not available' do
-          before do
-            allow(ledger_syncer).to receive(:available?).and_return(false)
-          end
+        it 'returns error when syncer not available' do
+          allow(ledger_syncer).to receive(:available?).and_return(false)
+          output = capture_stdout { run_command('--ledger-only', robot_mode: true) }
+          parsed = JSON.parse(output)
 
-          it 'returns 1 with setup message' do
-            output = capture_stdout { run_command('--ledger-only', robot_mode: true) }
-            parsed = JSON.parse(output)
-
-            expect(parsed['status']).to eq('error')
-            expect(parsed['error']['code']).to eq('LEDGER_NOT_SETUP')
-          end
+          expect(parsed['status']).to eq('error')
+          expect(parsed['error']['code']).to eq('LEDGER_NOT_SETUP')
         end
       end
 
@@ -368,55 +349,43 @@ RSpec.describe Eluent::CLI::Commands::Sync do
 
       describe '--reconcile' do
         before do
-          allow(ledger_syncer).to receive(:available?).and_return(true)
-          allow(ledger_syncer).to receive(:reconcile_offline_claims!).and_return([])
+          allow(ledger_syncer).to receive_messages(available?: true, reconcile_offline_claims!: [])
         end
 
-        context 'with no offline claims' do
-          it 'returns 0' do
-            expect(run_command('--reconcile', robot_mode: true)).to eq(0)
-          end
-
-          it 'outputs no claims message' do
-            output = capture_stdout { run_command('--reconcile', robot_mode: true) }
-            parsed = JSON.parse(output)
-
-            expect(parsed['status']).to eq('ok')
-          end
+        it 'returns 0 with no offline claims' do
+          expect(run_command('--reconcile', robot_mode: true)).to eq(0)
         end
 
-        context 'with offline claims' do
-          let(:offline_claim) do
-            Eluent::Sync::OfflineClaim.new(
-              atom_id: 'test-atom',
-              agent_id: 'test-agent',
-              claimed_at: Time.now
-            )
-          end
+        it 'outputs success with no offline claims' do
+          output = capture_stdout { run_command('--reconcile', robot_mode: true) }
+          parsed = JSON.parse(output)
 
-          before do
-            allow(ledger_sync_state).to receive(:offline_claims?).and_return(true)
-            allow(ledger_sync_state).to receive(:offline_claims).and_return([offline_claim])
-          end
+          expect(parsed['status']).to eq('ok')
+        end
 
-          it 'calls reconcile_offline_claims!' do
-            run_command('--reconcile', robot_mode: true)
-            expect(ledger_syncer).to have_received(:reconcile_offline_claims!)
-          end
+        it 'calls reconcile_offline_claims! with offline claims' do
+          offline_claim = Eluent::Sync::OfflineClaim.new(
+            atom_id: 'test-atom', agent_id: 'test-agent', claimed_at: Time.now
+          )
+          allow(ledger_sync_state).to receive_messages(offline_claims?: true, offline_claims: [offline_claim])
+          run_command('--reconcile', robot_mode: true)
+          expect(ledger_syncer).to have_received(:reconcile_offline_claims!)
+        end
 
-          it 'returns 0' do
-            expect(run_command('--reconcile', robot_mode: true)).to eq(0)
-          end
+        it 'returns 0 with offline claims' do
+          offline_claim = Eluent::Sync::OfflineClaim.new(
+            atom_id: 'test-atom', agent_id: 'test-agent', claimed_at: Time.now
+          )
+          allow(ledger_sync_state).to receive_messages(offline_claims?: true, offline_claims: [offline_claim])
+          expect(run_command('--reconcile', robot_mode: true)).to eq(0)
         end
       end
 
       describe '--force-resync' do
         before do
-          allow(ledger_syncer).to receive(:available?).and_return(true)
           allow(ledger_syncer).to receive(:teardown!)
-          allow(ledger_syncer).to receive(:setup!).and_return(setup_result)
-          allow(ledger_syncer).to receive(:pull_ledger).and_return(sync_result)
-          allow(ledger_syncer).to receive(:sync_to_main).and_return(sync_result)
+          allow(ledger_syncer).to receive_messages(available?: true, setup!: setup_result, pull_ledger: sync_result,
+                                                   sync_to_main: sync_result)
         end
 
         it 'requires --yes confirmation' do
@@ -438,9 +407,7 @@ RSpec.describe Eluent::CLI::Commands::Sync do
 
       describe '--status' do
         before do
-          allow(ledger_syncer).to receive(:available?).and_return(true)
-          allow(ledger_syncer).to receive(:healthy?).and_return(true)
-          allow(ledger_syncer).to receive(:online?).and_return(true)
+          allow(ledger_syncer).to receive_messages(available?: true, healthy?: true, online?: true)
         end
 
         it 'returns 0' do

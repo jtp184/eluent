@@ -250,9 +250,7 @@ RSpec.describe Eluent::CLI::Commands::Claim do
 
       allow(Eluent::Storage::GlobalPaths).to receive(:new).and_return(global_paths)
       allow(Eluent::Sync::LedgerSyncer).to receive(:new).and_return(ledger_syncer)
-      allow(ledger_syncer).to receive(:available?).and_return(true)
-      allow(ledger_syncer).to receive(:online?).and_return(true)
-      allow(ledger_syncer).to receive(:claim_and_push).and_return(claim_result)
+      allow(ledger_syncer).to receive_messages(available?: true, online?: true, claim_and_push: claim_result)
     end
 
     it 'uses ledger syncer for claims' do
@@ -314,9 +312,8 @@ RSpec.describe Eluent::CLI::Commands::Claim do
 
       before do
         allow(Eluent::Sync::LedgerSyncState).to receive(:new).and_return(ledger_sync_state)
-        allow(ledger_sync_state).to receive(:load).and_return(ledger_sync_state)
-        allow(ledger_sync_state).to receive(:record_offline_claim).and_return(ledger_sync_state)
-        allow(ledger_sync_state).to receive(:save).and_return(ledger_sync_state)
+        allow(ledger_sync_state).to receive_messages(load: ledger_sync_state, record_offline_claim: ledger_sync_state,
+                                                     save: ledger_sync_state)
       end
 
       it 'skips ledger sync and claims locally' do
@@ -340,9 +337,7 @@ RSpec.describe Eluent::CLI::Commands::Claim do
       end
 
       before do
-        allow(ledger_syncer).to receive(:available?).and_return(false)
-        allow(ledger_syncer).to receive(:online?).and_return(true)
-        allow(ledger_syncer).to receive(:setup!).and_return(setup_result)
+        allow(ledger_syncer).to receive_messages(available?: false, online?: true, setup!: setup_result)
       end
 
       it 'returns error when syncer setup fails' do
@@ -359,9 +354,8 @@ RSpec.describe Eluent::CLI::Commands::Claim do
 
       before do
         allow(Eluent::Sync::LedgerSyncState).to receive(:new).and_return(ledger_sync_state)
-        allow(ledger_sync_state).to receive(:load).and_return(ledger_sync_state)
-        allow(ledger_sync_state).to receive(:record_offline_claim).and_return(ledger_sync_state)
-        allow(ledger_sync_state).to receive(:save).and_return(ledger_sync_state)
+        allow(ledger_sync_state).to receive_messages(load: ledger_sync_state, record_offline_claim: ledger_sync_state,
+                                                     save: ledger_sync_state)
       end
 
       it 'records offline claim in state' do

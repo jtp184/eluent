@@ -303,15 +303,10 @@ module Eluent
           if @robot_mode
             puts JSON.generate({ status: 'ok', data: data })
           else
-            if result.created_branch
-              puts "#{@pastel.green('el:')} Created ledger branch: #{sync_config['ledger_branch']}"
-            end
-            if result.created_worktree
-              puts "#{@pastel.green('el:')} Created worktree at: #{global_paths.sync_worktree_dir}"
-            end
-            unless result.created_branch || result.created_worktree
-              puts "#{@pastel.green('el:')} Ledger sync already configured"
-            end
+            prefix = @pastel.green('el:')
+            puts "#{prefix} Created ledger branch: #{sync_config['ledger_branch']}" if result.created_branch
+            puts "#{prefix} Created worktree at: #{global_paths.sync_worktree_dir}" if result.created_worktree
+            puts "#{prefix} Ledger sync already configured" unless result.created_branch || result.created_worktree
           end
         end
 

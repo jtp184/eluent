@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# rubocop:disable RSpec/MultipleMemoizedHelpers, RSpec/MessageSpies, RSpec/StubbedMock
+
 # ==============================================================================
 # LedgerSyncer Specs
 # ==============================================================================
@@ -32,11 +34,11 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
   let(:frozen_time) { Time.utc(2026, 1, 20, 12, 0, 0) }
   let(:clock) { class_double(Time, now: frozen_time) }
 
-  let(:repository) { instance_double('Eluent::Storage::JsonlRepository', root_path: repo_path) }
-  let(:git_adapter) { instance_double('Eluent::Sync::GitAdapter', repo_path: repo_path) }
+  let(:repository) { instance_double(Eluent::Storage::JsonlRepository, root_path: repo_path) }
+  let(:git_adapter) { instance_double(Eluent::Sync::GitAdapter, repo_path: repo_path) }
   let(:global_paths) do
     instance_double(
-      'Eluent::Storage::GlobalPaths',
+      Eluent::Storage::GlobalPaths,
       sync_worktree_dir: worktree_path,
       ledger_sync_state_file: '/home/user/.eluent/test-repo/.ledger-sync-state',
       ledger_lock_file: '/home/user/.eluent/test-repo/.ledger.lock'
@@ -205,8 +207,7 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
 
   describe '#available?' do
     before do
-      allow(git_adapter).to receive(:worktree_list).and_return([])
-      allow(git_adapter).to receive(:branch_exists?).and_return(false)
+      allow(git_adapter).to receive_messages(worktree_list: [], branch_exists?: false)
     end
 
     it 'returns true when worktree exists and local branch exists' do
@@ -261,11 +262,11 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
 
   describe '#healthy?' do
     before do
-      allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path, branch: branch)])
       allow(git_adapter).to receive(:branch_exists?).with(branch).and_return(true)
       allow(Dir).to receive(:exist?).with(worktree_path).and_return(true)
       allow(File).to receive(:exist?).with("#{worktree_path}/.git").and_return(true)
-      allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
+      allow(git_adapter).to receive_messages(worktree_list: [worktree_info(path: worktree_path, branch: branch)],
+                                             run_git_in_worktree: '')
     end
 
     it 'returns true when available and worktree is valid' do
@@ -279,7 +280,8 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
     end
 
     it 'returns false when worktree is stale' do
-      allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path, branch: 'wrong-branch')])
+      allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path,
+                                                                              branch: 'wrong-branch')])
 
       expect(syncer.healthy?).to be false
     end
@@ -292,15 +294,12 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
   describe '#setup!' do
     before do
       allow(global_paths).to receive(:ensure_directories!)
-      allow(git_adapter).to receive(:branch_exists?).and_return(false)
-      allow(git_adapter).to receive(:worktree_list).and_return([])
-      allow(git_adapter).to receive(:current_branch).and_return('main')
       allow(git_adapter).to receive(:create_orphan_branch)
       allow(git_adapter).to receive(:push_branch)
       allow(git_adapter).to receive(:checkout)
-      allow(git_adapter).to receive(:worktree_add).and_return(worktree_info(path: worktree_path, branch: branch))
-      allow(Dir).to receive(:exist?).and_return(false)
-      allow(Dir).to receive(:empty?).and_return(true)
+      allow(git_adapter).to receive_messages(branch_exists?: false, worktree_list: [], current_branch: 'main',
+                                             worktree_add: worktree_info(path: worktree_path, branch: branch))
+      allow(Dir).to receive_messages(exist?: false, empty?: true)
     end
 
     it 'creates directories via global_paths' do
@@ -439,8 +438,8 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
       # Worktree health check stubs
       allow(Dir).to receive(:exist?).with(worktree_path).and_return(true)
       allow(File).to receive(:exist?).with("#{worktree_path}/.git").and_return(true)
-      allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path, branch: branch)])
-      allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
+      allow(git_adapter).to receive_messages(worktree_list: [worktree_info(path: worktree_path, branch: branch)],
+                                             run_git_in_worktree: '')
 
       # Pull (fetch + reset) stubs
       allow(git_adapter).to receive(:fetch_branch)
@@ -556,7 +555,7 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
       attempt = 0
       allow(git_adapter).to receive(:push_branch) do
         attempt += 1
-        raise Eluent::Sync::BranchError.new('Push rejected') if attempt == 1
+        raise Eluent::Sync::BranchError, 'Push rejected' if attempt == 1
       end
       allow(syncer).to receive(:sleep)
 
@@ -581,7 +580,7 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
       call_count = 0
       allow(git_adapter).to receive(:push_branch) do
         call_count += 1
-        raise Eluent::Sync::BranchError.new('Push rejected') if call_count == 1
+        raise Eluent::Sync::BranchError, 'Push rejected' if call_count == 1
       end
       allow(syncer).to receive(:sleep)
 
@@ -661,8 +660,8 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
     before do
       allow(Dir).to receive(:exist?).with(worktree_path).and_return(true)
       allow(File).to receive(:exist?).with("#{worktree_path}/.git").and_return(true)
-      allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path, branch: branch)])
-      allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
+      allow(git_adapter).to receive_messages(worktree_list: [worktree_info(path: worktree_path, branch: branch)],
+                                             run_git_in_worktree: '')
       allow(git_adapter).to receive(:fetch_branch)
     end
 
@@ -693,7 +692,8 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
 
     it 'stages, commits, and pushes changes' do
       expect(git_adapter).to receive(:run_git_in_worktree).with(worktree_path, 'add', '-A')
-      expect(git_adapter).to receive(:run_git_in_worktree).with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
+      expect(git_adapter).to receive(:run_git_in_worktree).with(worktree_path, 'status',
+                                                                '--porcelain').and_return(' M data.jsonl')
       expect(git_adapter).to receive(:run_git_in_worktree).with(worktree_path, 'commit', '-m', anything)
       expect(git_adapter).to receive(:push_branch).with(remote: remote, branch: branch)
 
@@ -774,8 +774,9 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
       # git add, git status (showing changes), then git commit
       expect(git_adapter).to receive(:run_git_in_worktree).with(worktree_path, 'add', '-A').ordered
       expect(git_adapter).to receive(:run_git_in_worktree).with(worktree_path, 'status', '--porcelain')
-        .and_return(' M data.jsonl').ordered
-      expect(git_adapter).to receive(:run_git_in_worktree).with(worktree_path, 'commit', '-m', 'Seed ledger from main branch').ordered
+                                                          .and_return(' M data.jsonl').ordered
+      expect(git_adapter).to receive(:run_git_in_worktree).with(worktree_path, 'commit', '-m',
+                                                                'Seed ledger from main branch').ordered
 
       expect(FileUtils).to receive(:cp).with("#{main_ledger}/data.jsonl", "#{worktree_ledger}/data.jsonl")
 
@@ -801,8 +802,8 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
     before do
       allow(Dir).to receive(:exist?).with(worktree_path).and_return(true)
       allow(File).to receive(:exist?).with("#{worktree_path}/.git").and_return(true)
-      allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path, branch: branch)])
-      allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
+      allow(git_adapter).to receive_messages(worktree_list: [worktree_info(path: worktree_path, branch: branch)],
+                                             run_git_in_worktree: '')
       allow(git_adapter).to receive(:fetch_branch)
       allow(git_adapter).to receive(:push_branch)
       allow(File).to receive(:exist?).with(data_file).and_return(true)
@@ -893,8 +894,8 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
     it 'returns true when worktree is on wrong branch (misconfigured)' do
       allow(Dir).to receive(:exist?).with(worktree_path).and_return(true)
       allow(File).to receive(:exist?).with("#{worktree_path}/.git").and_return(true)
-      allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
-      allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path, branch: 'wrong-branch')])
+      wrong_branch_worktree = worktree_info(path: worktree_path, branch: 'wrong-branch')
+      allow(git_adapter).to receive_messages(run_git_in_worktree: '', worktree_list: [wrong_branch_worktree])
 
       expect(syncer.worktree_stale?).to be true
     end
@@ -902,9 +903,8 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
     it 'returns true when worktree directory exists but is not in git registry (orphaned directory)' do
       allow(Dir).to receive(:exist?).with(worktree_path).and_return(true)
       allow(File).to receive(:exist?).with("#{worktree_path}/.git").and_return(true)
-      allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
       # Worktree not in registry (e.g., after manual directory copy)
-      allow(git_adapter).to receive(:worktree_list).and_return([])
+      allow(git_adapter).to receive_messages(run_git_in_worktree: '', worktree_list: [])
 
       expect(syncer.worktree_stale?).to be true
     end
@@ -948,7 +948,7 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
   end
 
   describe '#reconcile_offline_claims!' do
-    let(:mock_state) { instance_double('Eluent::Sync::LedgerSyncState') }
+    let(:mock_state) { instance_double(Eluent::Sync::LedgerSyncState) }
 
     it 'returns empty array when state has no offline claims' do
       allow(mock_state).to receive(:offline_claims?).and_return(false)
@@ -970,16 +970,15 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
       end
 
       before do
-        allow(mock_state).to receive(:offline_claims?).and_return(true)
-        allow(mock_state).to receive(:offline_claims).and_return([offline_claim])
+        allow(mock_state).to receive_messages(offline_claims?: true, offline_claims: [offline_claim])
         allow(mock_state).to receive(:clear_offline_claim)
         allow(mock_state).to receive(:save)
 
         # Setup for worktree operations
-        allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path, branch: branch)])
         allow(Dir).to receive(:exist?).with(worktree_path).and_return(true)
         allow(File).to receive(:exist?).with(File.join(worktree_path, '.git')).and_return(true)
-        allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
+        allow(git_adapter).to receive_messages(worktree_list: [worktree_info(path: worktree_path, branch: branch)],
+                                               run_git_in_worktree: '')
         allow(git_adapter).to receive(:fetch_branch)
         allow(git_adapter).to receive(:push_branch)
 
@@ -1067,8 +1066,8 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
 
     it 'returns in_progress atoms with updated_at before threshold' do
       allow(File).to receive(:foreach).with(data_file)
-        .and_yield("#{JSON.generate(stale_atom)}\n")
-        .and_yield("#{JSON.generate(fresh_atom)}\n")
+                                      .and_yield("#{JSON.generate(stale_atom)}\n")
+                                      .and_yield("#{JSON.generate(fresh_atom)}\n")
 
       result = syncer.stale_claims(updated_before: threshold)
 
@@ -1078,7 +1077,7 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
 
     it 'excludes atoms in open status even if old' do
       allow(File).to receive(:foreach).with(data_file)
-        .and_yield("#{JSON.generate(open_atom)}\n")
+                                      .and_yield("#{JSON.generate(open_atom)}\n")
 
       result = syncer.stale_claims(updated_before: threshold)
 
@@ -1087,7 +1086,7 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
 
     it 'excludes atoms with updated_at after the threshold' do
       allow(File).to receive(:foreach).with(data_file)
-        .and_yield("#{JSON.generate(fresh_atom)}\n")
+                                      .and_yield("#{JSON.generate(fresh_atom)}\n")
 
       result = syncer.stale_claims(updated_before: threshold)
 
@@ -1103,9 +1102,9 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
     end
 
     it 'skips records without updated_at timestamp' do
-      atom_no_timestamp = stale_atom.reject { |k, _| k == :updated_at }
+      atom_no_timestamp = stale_atom.except(:updated_at)
       allow(File).to receive(:foreach).with(data_file)
-        .and_yield("#{JSON.generate(atom_no_timestamp)}\n")
+                                      .and_yield("#{JSON.generate(atom_no_timestamp)}\n")
 
       result = syncer.stale_claims(updated_before: threshold)
 
@@ -1114,8 +1113,8 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
 
     it 'handles malformed JSON lines gracefully' do
       allow(File).to receive(:foreach).with(data_file)
-        .and_yield("not valid json\n")
-        .and_yield("#{JSON.generate(stale_atom)}\n")
+                                      .and_yield("not valid json\n")
+                                      .and_yield("#{JSON.generate(stale_atom)}\n")
 
       result = syncer.stale_claims(updated_before: threshold)
 
@@ -1126,7 +1125,7 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
     it 'handles invalid timestamp formats gracefully' do
       atom_bad_timestamp = stale_atom.merge(updated_at: 'not-a-timestamp')
       allow(File).to receive(:foreach).with(data_file)
-        .and_yield("#{JSON.generate(atom_bad_timestamp)}\n")
+                                      .and_yield("#{JSON.generate(atom_bad_timestamp)}\n")
 
       result = syncer.stale_claims(updated_before: threshold)
 
@@ -1156,9 +1155,9 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
     before do
       allow(File).to receive(:exist?).with(data_file).and_return(true)
       allow(File).to receive(:foreach).with(data_file)
-        .and_yield("#{JSON.generate(stale_atom1)}\n")
+                                      .and_yield("#{JSON.generate(stale_atom1)}\n")
       allow(File).to receive(:readlines).with(data_file)
-        .and_return(["#{JSON.generate(stale_atom1)}\n"])
+                                        .and_return(["#{JSON.generate(stale_atom1)}\n"])
       allow(File).to receive(:write).with(/\.tmp$/, anything)
       allow(File).to receive(:rename)
       allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
@@ -1194,10 +1193,11 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
 
     it 'commits with summary message for 2-5 releases' do
       allow(File).to receive(:foreach).with(data_file)
-        .and_yield("#{JSON.generate(stale_atom1)}\n")
-        .and_yield("#{JSON.generate(stale_atom2)}\n")
+                                      .and_yield("#{JSON.generate(stale_atom1)}\n")
+                                      .and_yield("#{JSON.generate(stale_atom2)}\n")
       allow(File).to receive(:readlines).with(data_file)
-        .and_return(["#{JSON.generate(stale_atom1)}\n", "#{JSON.generate(stale_atom2)}\n"])
+                                        .and_return(["#{JSON.generate(stale_atom1)}\n",
+                                                     "#{JSON.generate(stale_atom2)}\n"])
       allow(git_adapter).to receive(:run_git_in_worktree)
         .with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
 
@@ -1218,7 +1218,7 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
         atoms.each { |a| block.call("#{JSON.generate(a)}\n") }
       end
       allow(File).to receive(:readlines).with(data_file)
-        .and_return(atoms.map { |a| "#{JSON.generate(a)}\n" })
+                                        .and_return(atoms.map { |a| "#{JSON.generate(a)}\n" })
       allow(git_adapter).to receive(:run_git_in_worktree)
         .with(worktree_path, 'status', '--porcelain').and_return(' M data.jsonl')
 
@@ -1257,11 +1257,11 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
       # Worktree state checks
       allow(Dir).to receive(:exist?).with(worktree_path).and_return(true)
       allow(File).to receive(:exist?).with("#{worktree_path}/.git").and_return(true)
-      allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path, branch: branch)])
 
       # Pull operations (fetch + reset)
       allow(git_adapter).to receive(:fetch_branch)
-      allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
+      allow(git_adapter).to receive_messages(worktree_list: [worktree_info(path: worktree_path, branch: branch)],
+                                             run_git_in_worktree: '')
 
       # Push operation
       allow(git_adapter).to receive(:push_branch)
@@ -1269,9 +1269,9 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
       # File operations
       allow(File).to receive(:exist?).with(data_file).and_return(true)
       allow(File).to receive(:foreach).with(data_file)
-        .and_yield("#{JSON.generate(claimed_atom)}\n")
+                                      .and_yield("#{JSON.generate(claimed_atom)}\n")
       allow(File).to receive(:readlines).with(data_file)
-        .and_return(["#{JSON.generate(claimed_atom)}\n"])
+                                        .and_return(["#{JSON.generate(claimed_atom)}\n"])
       allow(File).to receive(:write).with(/\.tmp$/, anything)
       allow(File).to receive(:rename)
     end
@@ -1356,7 +1356,7 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
     it 'fails when atom is not in_progress' do
       open_atom = claimed_atom.merge(status: 'open')
       allow(File).to receive(:foreach).with(data_file)
-        .and_yield("#{JSON.generate(open_atom)}\n")
+                                      .and_yield("#{JSON.generate(open_atom)}\n")
 
       result = syncer.heartbeat(atom_id: atom_id)
 
@@ -1367,7 +1367,7 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
     it 'fails when atom is in terminal state' do
       closed_atom = claimed_atom.merge(status: 'closed')
       allow(File).to receive(:foreach).with(data_file)
-        .and_yield("#{JSON.generate(closed_atom)}\n")
+                                      .and_yield("#{JSON.generate(closed_atom)}\n")
 
       result = syncer.heartbeat(atom_id: atom_id)
 
@@ -1493,15 +1493,15 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
     before do
       allow(Dir).to receive(:exist?).with(worktree_path).and_return(true)
       allow(File).to receive(:exist?).with("#{worktree_path}/.git").and_return(true)
-      allow(git_adapter).to receive(:worktree_list).and_return([worktree_info(path: worktree_path, branch: branch)])
-      allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
+      allow(git_adapter).to receive_messages(worktree_list: [worktree_info(path: worktree_path, branch: branch)],
+                                             run_git_in_worktree: '')
       allow(git_adapter).to receive(:fetch_branch)
       allow(git_adapter).to receive(:push_branch)
       allow(File).to receive(:exist?).with(data_file).and_return(true)
       allow(File).to receive(:foreach).with(data_file)
-        .and_yield("#{JSON.generate(stale_atom)}\n")
+                                      .and_yield("#{JSON.generate(stale_atom)}\n")
       allow(File).to receive(:readlines).with(data_file)
-        .and_return(["#{JSON.generate(stale_atom)}\n"])
+                                        .and_return(["#{JSON.generate(stale_atom)}\n"])
       allow(File).to receive(:write).with(/\.tmp$/, anything)
       allow(File).to receive(:rename)
     end
@@ -1535,7 +1535,7 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
       push_attempts = 0
       allow(git_adapter).to receive(:push_branch) do
         push_attempts += 1
-        raise Eluent::Sync::GitError.new('Push rejected') if push_attempts < 3
+        raise Eluent::Sync::GitError, 'Push rejected' if push_attempts < 3
       end
 
       expect(syncer_with_timeout).to receive(:warn).with(/auto-released 1 stale claim/)
@@ -1586,7 +1586,7 @@ RSpec.describe Eluent::Sync::LedgerSyncer do
         stale_atoms.each { |atom| block.call("#{JSON.generate(atom)}\n") }
       end
       allow(File).to receive(:readlines).with(data_file)
-        .and_return(stale_atoms.map { |a| "#{JSON.generate(a)}\n" })
+                                        .and_return(stale_atoms.map { |a| "#{JSON.generate(a)}\n" })
       allow(File).to receive(:write).with(/\.tmp$/, anything)
       allow(File).to receive(:rename)
       allow(git_adapter).to receive(:run_git_in_worktree).and_return('')
@@ -1620,3 +1620,5 @@ RSpec.describe Eluent::Sync::LedgerSyncerError do
     expect(described_class.superclass).to eq(Eluent::Error)
   end
 end
+
+# rubocop:enable RSpec/MultipleMemoizedHelpers, RSpec/MessageSpies, RSpec/StubbedMock
