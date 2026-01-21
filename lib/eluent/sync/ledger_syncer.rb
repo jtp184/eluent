@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'fileutils'
+require 'monitor'
 require 'time'
 require_relative 'concerns/ledger_worktree'
 require_relative 'concerns/ledger_atom_operations'
@@ -105,6 +106,7 @@ module Eluent
         @branch = branch
         @clock = clock
         @claim_timeout_hours = normalize_claim_timeout(claim_timeout_hours)
+        @worktree_monitor = Monitor.new
       end
 
       # ------------------------------------------------------------------
@@ -144,12 +146,14 @@ module Eluent
       #
       # @return [SetupResult] indicating what was created and any errors
       def setup!
-        global_paths.ensure_directories!
-        created_branch = ensure_branch!
-        created_worktree = ensure_worktree!
-        seed_from_main if created_worktree && ledger_dir_empty?
+        with_worktree_lock do
+          global_paths.ensure_directories!
+          created_branch = ensure_branch!
+          created_worktree = ensure_worktree!
+          seed_from_main if created_worktree && ledger_dir_empty?
 
-        SetupResult.new(success: true, created_branch: created_branch, created_worktree: created_worktree)
+          SetupResult.new(success: true, created_branch: created_branch, created_worktree: created_worktree)
+        end
       rescue GitError, WorktreeError, BranchError, LedgerSyncerError => e
         SetupResult.new(success: false, error: e.message)
       end
@@ -161,10 +165,12 @@ module Eluent
       #
       # @raise [LedgerSyncerError] if cleanup fails
       def teardown!
-        remove_worktree_if_exists
-        git_adapter.worktree_prune
-        cleanup_state_files
-        true
+        with_worktree_lock do
+          remove_worktree_if_exists
+          git_adapter.worktree_prune
+          cleanup_state_files
+          true
+        end
       rescue GitError, WorktreeError => e
         raise LedgerSyncerError, "Teardown failed: #{e.message}"
       end
@@ -185,29 +191,31 @@ module Eluent
       # @param agent_id [String] the agent claiming the atom
       # @return [ClaimResult] with success status, claimed_by, and retry count
       def claim_and_push(atom_id:, agent_id:)
-        recover_stale_worktree! if worktree_stale?
         retries = 0
+        with_worktree_lock do
+          recover_stale_worktree! if worktree_stale?
 
-        loop do
-          pull_result = pull_ledger
-          return ClaimResult.new(success: false, error: pull_result.error, retries: retries) unless pull_result.success
+          loop do
+            pull_result = pull_ledger
+            return ClaimResult.new(success: false, error: pull_result.error, retries: retries) unless pull_result.success
 
-          claim_result = attempt_claim(atom_id: atom_id, agent_id: agent_id)
-          return claim_result.with(retries: retries) unless claim_result.success
+            claim_result = attempt_claim(atom_id: atom_id, agent_id: agent_id)
+            return claim_result.with(retries: retries) unless claim_result.success
 
-          push_result = push_ledger
-          return ClaimResult.new(success: true, claimed_by: agent_id, retries: retries) if push_result.success
+            push_result = push_ledger
+            return ClaimResult.new(success: true, claimed_by: agent_id, retries: retries) if push_result.success
 
-          # Push failed (likely conflict) - retry with backoff
-          retries += 1
-          if retries >= max_retries
-            return ClaimResult.new(success: false, error: 'Max retries exceeded', retries: retries)
+            # Push failed (likely conflict) - retry with backoff
+            retries += 1
+            if retries >= max_retries
+              return ClaimResult.new(success: false, error: 'Max retries exceeded', retries: retries)
+            end
+
+            sleep_with_backoff(retries)
           end
-
-          sleep_with_backoff(retries)
         end
       rescue LedgerSyncerError => e
-        ClaimResult.new(success: false, error: e.message, retries: retries || 0)
+        ClaimResult.new(success: false, error: e.message, retries: retries)
       end
 
       # Fetches and resets the worktree to match the remote ledger branch.
@@ -218,12 +226,14 @@ module Eluent
       # When `claim_timeout_hours` is configured, automatically releases
       # stale claims after pulling the latest state.
       def pull_ledger
-        recover_stale_worktree! if worktree_stale?
-        fetch_ledger_branch
-        merge_or_reset_ledger
-        auto_release_stale_claims
+        with_worktree_lock do
+          recover_stale_worktree! if worktree_stale?
+          fetch_ledger_branch
+          merge_or_reset_ledger
+          auto_release_stale_claims
 
-        SyncResult.new(success: true, changes_applied: 1)
+          SyncResult.new(success: true, changes_applied: 1)
+        end
       rescue GitError, BranchError, LedgerSyncerError => e
         SyncResult.new(success: false, error: "Pull failed: #{e.message}")
       end
@@ -232,10 +242,12 @@ module Eluent
       #
       # @return [SyncResult] with success status
       def push_ledger
-        commit_ledger_changes
-        git_adapter.push_branch(remote: remote, branch: branch)
+        with_worktree_lock do
+          commit_ledger_changes
+          git_adapter.push_branch(remote: remote, branch: branch)
 
-        SyncResult.new(success: true, changes_applied: 1)
+          SyncResult.new(success: true, changes_applied: 1)
+        end
       rescue GitError, BranchError => e
         SyncResult.new(success: false, error: "Push failed: #{e.message}")
       end
@@ -245,13 +257,15 @@ module Eluent
       # Use this to update the main branch's view of ledger state after
       # pulling remote changes.
       def sync_to_main
-        src = worktree_ledger_dir
-        dest = main_ledger_dir
-        return SyncResult.new(success: false, error: 'Worktree ledger directory not found') unless Dir.exist?(src)
+        with_worktree_lock do
+          src = worktree_ledger_dir
+          dest = main_ledger_dir
+          return SyncResult.new(success: false, error: 'Worktree ledger directory not found') unless Dir.exist?(src)
 
-        FileUtils.mkdir_p(dest)
-        sync_directory(src, dest)
-        SyncResult.new(success: true, changes_applied: 1)
+          FileUtils.mkdir_p(dest)
+          sync_directory(src, dest)
+          SyncResult.new(success: true, changes_applied: 1)
+        end
       rescue SystemCallError => e
         SyncResult.new(success: false, error: "Sync to main failed: #{e.message}")
       end
@@ -261,14 +275,16 @@ module Eluent
       # Used during initial setup to bootstrap the sync branch with existing
       # ledger data. No-op if main has no ledger directory.
       def seed_from_main
-        src = main_ledger_dir
-        dest = worktree_ledger_dir
-        return SyncResult.new(success: true) unless Dir.exist?(src)
+        with_worktree_lock do
+          src = main_ledger_dir
+          dest = worktree_ledger_dir
+          return SyncResult.new(success: true) unless Dir.exist?(src)
 
-        FileUtils.mkdir_p(dest)
-        sync_directory(src, dest)
-        commit_ledger_changes(message: 'Seed ledger from main branch')
-        SyncResult.new(success: true, changes_applied: 1)
+          FileUtils.mkdir_p(dest)
+          sync_directory(src, dest)
+          commit_ledger_changes(message: 'Seed ledger from main branch')
+          SyncResult.new(success: true, changes_applied: 1)
+        end
       rescue SystemCallError, GitError => e
         SyncResult.new(success: false, error: "Seed from main failed: #{e.message}")
       end
@@ -284,20 +300,22 @@ module Eluent
           return ClaimResult.new(success: false, error: 'atom_id cannot be nil or empty')
         end
 
-        pull_result = pull_ledger
-        return ClaimResult.new(success: false, error: pull_result.error) unless pull_result.success
+        with_worktree_lock do
+          pull_result = pull_ledger
+          return ClaimResult.new(success: false, error: pull_result.error) unless pull_result.success
 
-        atom = find_atom_in_worktree(atom_id)
-        return ClaimResult.new(success: false, error: "Atom not found: #{atom_id}") unless atom
-        return ClaimResult.new(success: true) unless atom[:status] == 'in_progress'
+          atom = find_atom_in_worktree(atom_id)
+          return ClaimResult.new(success: false, error: "Atom not found: #{atom_id}") unless atom
+          return ClaimResult.new(success: true) unless atom[:status] == 'in_progress'
 
-        update_atom_in_worktree(atom_id, status: 'open', assignee: nil)
-        commit_ledger_changes(message: "Release claim on #{atom_id}")
+          update_atom_in_worktree(atom_id, status: 'open', assignee: nil)
+          commit_ledger_changes(message: "Release claim on #{atom_id}")
 
-        push_result = push_ledger
-        return ClaimResult.new(success: false, error: push_result.error) unless push_result.success
+          push_result = push_ledger
+          return ClaimResult.new(success: false, error: push_result.error) unless push_result.success
 
-        ClaimResult.new(success: true)
+          ClaimResult.new(success: true)
+        end
       rescue LedgerSyncerError => e
         ClaimResult.new(success: false, error: e.message)
       end
@@ -354,7 +372,9 @@ module Eluent
       # @param updated_before [Time] claims with updated_at before this are stale
       # @return [Array<Hash>] atoms matching stale criteria, with symbolized keys
       def stale_claims(updated_before:)
-        find_stale_claims_in_worktree(updated_before: updated_before)
+        with_worktree_lock do
+          find_stale_claims_in_worktree(updated_before: updated_before)
+        end
       end
 
       # Releases stale claims, returning atoms to 'open' status.
@@ -367,16 +387,18 @@ module Eluent
       # @param updated_before [Time] claims with updated_at before this are released
       # @return [Array<String>] IDs of atoms whose claims were released
       def release_stale_claims(updated_before:)
-        stale = find_stale_claims_in_worktree(updated_before: updated_before)
-        return [] if stale.empty?
+        with_worktree_lock do
+          stale = find_stale_claims_in_worktree(updated_before: updated_before)
+          return [] if stale.empty?
 
-        released_ids = stale.map { |atom| atom[:id] }
-        release_atoms_in_worktree(released_ids)
+          released_ids = stale.map { |atom| atom[:id] }
+          release_atoms_in_worktree(released_ids)
 
-        message = build_release_commit_message(released_ids, stale)
-        commit_ledger_changes(message: message)
+          message = build_release_commit_message(released_ids, stale)
+          commit_ledger_changes(message: message)
 
-        released_ids
+          released_ids
+        end
       end
 
       # Updates an atom's timestamp without changing other fields (heartbeat).
@@ -397,24 +419,42 @@ module Eluent
           return ClaimResult.new(success: false, error: 'atom_id cannot be nil or empty')
         end
 
-        retries = 0
+        with_worktree_lock do
+          retries = 0
 
-        loop do
-          result = attempt_heartbeat(atom_id)
-          return result.with(retries: retries) if result.success || !retriable_heartbeat_error?(result)
+          loop do
+            result = attempt_heartbeat(atom_id)
+            return result.with(retries: retries) if result.success || !retriable_heartbeat_error?(result)
 
-          retries += 1
-          if retries >= max_retries
-            return ClaimResult.new(success: false, error: 'Max retries exceeded', retries: retries)
+            retries += 1
+            if retries >= max_retries
+              return ClaimResult.new(success: false, error: 'Max retries exceeded', retries: retries)
+            end
+
+            sleep_with_backoff(retries)
           end
-
-          sleep_with_backoff(retries)
         end
       end
 
       private
 
-      attr_reader :clock
+      attr_reader :clock, :worktree_monitor
+
+      # Serializes access to the worktree directory.
+      #
+      # Multiple threads (e.g., daemon handling concurrent clients) sharing a
+      # single LedgerSyncer instance must not interleave worktree operations.
+      # Without this, one thread's pull can reset the worktree while another
+      # thread is mid-claim, causing lost commits or corrupted state.
+      #
+      # Uses Monitor (reentrant) rather than Mutex because public methods like
+      # claim_and_push internally call other public methods (pull_ledger, push_ledger).
+      #
+      # @yield Block to execute while holding the lock
+      # @return [Object] Result of the block
+      def with_worktree_lock(&block)
+        worktree_monitor.synchronize(&block)
+      end
 
       # Reconciles a single offline claim.
       #
