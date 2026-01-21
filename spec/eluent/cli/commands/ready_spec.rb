@@ -204,8 +204,8 @@ RSpec.describe Eluent::CLI::Commands::Ready do
 
   describe 'robot mode' do
     before do
-      create_atom(title: 'Task 1')
-      create_atom(title: 'Task 2')
+      create_atom(id: atom1_id, title: 'Task 1')
+      create_atom(id: atom2_id, title: 'Task 2')
     end
 
     it 'outputs JSON' do

@@ -22,6 +22,8 @@ ClaudeCodeExecutor < AgentExecutor
 ```ruby
 # frozen_string_literal: true
 
+require 'securerandom'
+
 module Eluent
   module Agents
     module Implementations
@@ -29,7 +31,7 @@ module Eluent
         include Concerns::TmuxSessionManager
 
         POLL_INTERVAL = 3
-        TERMINAL_STATUSES = %i[closed wont_do discard].freeze
+        TERMINAL_STATUSES = %i[closed deferred wont_do discard].freeze
 
         def execute(atom, system_prompt: nil)
           @start_time = monotonic_now
@@ -95,7 +97,7 @@ module Eluent
 
         def generate_session_name(atom)
           safe_id = atom.id.to_s.gsub(/[^a-zA-Z0-9]/, "-")[0..7]
-          "eluent-#{safe_id}-#{Time.now.to_i}"
+          "eluent-#{safe_id}-#{Time.now.to_i}-#{SecureRandom.hex(2)}"
         end
 
         def monotonic_now
@@ -145,9 +147,13 @@ module Eluent
         end
 
         def wait_for_session(name, timeout: SESSION_START_TIMEOUT)
-          deadline = Time.now + timeout
-          sleep 0.1 until session_exists?(name) || Time.now > deadline
-          session_exists?(name)
+          deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+          loop do
+            return true if session_exists?(name)
+            return false if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+
+            sleep 0.1
+          end
         end
 
         def session_exists?(name)
@@ -172,7 +178,7 @@ module Eluent
         end
 
         def run_tmux(*args)
-          system("tmux", *args)
+          system('tmux', *args)
         end
 
         def resolve_working_directory
@@ -238,11 +244,18 @@ module Eluent
             el close #{atom.id} --reason "Brief summary of work completed"
             ```
 
-            If the task cannot or should not be completed:
+            If the task cannot be completed now but may be revisited later:
+
+            ```bash
+            el update #{atom.id} --status deferred
+            el comment add #{atom.id} "Reason this task is deferred..."
+            ```
+
+            If the task should not be completed at all:
 
             ```bash
             el update #{atom.id} --status wont_do
-            el comment add #{atom.id} "Reason this task cannot be completed..."
+            el comment add #{atom.id} "Reason this task will not be done..."
             ```
           MARKDOWN
         end
@@ -329,7 +342,8 @@ ExecutionLoop                          ClaudeCodeExecutor
 | Command | Purpose |
 |---------|---------|
 | `el close ID --reason "..."` | Signal successful completion |
-| `el update ID --status wont_do` | Signal task cannot be completed |
+| `el update ID --status deferred` | Signal task deferred for later |
+| `el update ID --status wont_do` | Signal task will not be completed |
 | `el update ID --status discard` | Signal task should be abandoned |
 | `el comment add ID "..."` | Add progress notes |
 | `el update ID --status blocked` | Report blockers (non-terminal) |
@@ -474,8 +488,10 @@ def initialize(
 end
 
 def validate!
-  return if skip_api_validation
-  # existing validation...
+  unless skip_api_validation || any_provider_configured?
+    raise ConfigurationError.new('No API provider configured', field: :api_keys)
+  end
+  # remaining validations...
 end
 ```
 

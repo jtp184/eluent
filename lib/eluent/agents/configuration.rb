@@ -10,6 +10,8 @@ module Eluent
       DEFAULT_EXECUTION_TIMEOUT = 3600
       DEFAULT_MAX_TOOL_CALLS = 50
       DEFAULT_MAX_RETRIES = 3
+      DEFAULT_CLAUDE_CODE_PATH = 'claude'
+      DEFAULT_CONTEXT_DIRECTORY = '.eluent/agent-context'
 
       def initialize(
         claude_api_key: nil,
@@ -18,7 +20,12 @@ module Eluent
         execution_timeout: DEFAULT_EXECUTION_TIMEOUT,
         max_tool_calls: DEFAULT_MAX_TOOL_CALLS,
         max_retries: DEFAULT_MAX_RETRIES,
-        agent_id: nil
+        agent_id: nil,
+        claude_code_path: DEFAULT_CLAUDE_CODE_PATH,
+        working_directory: nil,
+        preserve_sessions: false,
+        context_directory: DEFAULT_CONTEXT_DIRECTORY,
+        skip_api_validation: false
       )
         @claude_api_key = claude_api_key || ENV.fetch('ANTHROPIC_API_KEY', nil)
         @openai_api_key = openai_api_key || ENV.fetch('OPENAI_API_KEY', nil)
@@ -27,6 +34,11 @@ module Eluent
         @max_tool_calls = max_tool_calls
         @max_retries = max_retries
         @agent_id = agent_id || generate_agent_id
+        @claude_code_path = claude_code_path
+        @working_directory = working_directory
+        @preserve_sessions = preserve_sessions
+        @context_directory = context_directory
+        @skip_api_validation = skip_api_validation
       end
 
       def claude_configured?
@@ -42,7 +54,9 @@ module Eluent
       end
 
       def validate!
-        raise ConfigurationError.new('No API provider configured', field: :api_keys) unless any_provider_configured?
+        unless skip_api_validation || any_provider_configured?
+          raise ConfigurationError.new('No API provider configured', field: :api_keys)
+        end
 
         if request_timeout <= 0
           raise ConfigurationError.new('Request timeout must be positive', field: :request_timeout)
@@ -65,12 +79,19 @@ module Eluent
           request_timeout: request_timeout,
           execution_timeout: execution_timeout,
           max_tool_calls: max_tool_calls,
-          max_retries: max_retries
+          max_retries: max_retries,
+          claude_code_path: claude_code_path,
+          working_directory: working_directory,
+          preserve_sessions: preserve_sessions,
+          context_directory: context_directory,
+          skip_api_validation: skip_api_validation
         }
       end
 
       attr_reader :claude_api_key, :openai_api_key, :request_timeout,
-                  :execution_timeout, :max_tool_calls, :max_retries, :agent_id
+                  :execution_timeout, :max_tool_calls, :max_retries, :agent_id,
+                  :claude_code_path, :working_directory, :preserve_sessions,
+                  :context_directory, :skip_api_validation
 
       private
 
