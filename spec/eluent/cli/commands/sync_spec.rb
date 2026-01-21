@@ -176,6 +176,316 @@ RSpec.describe Eluent::CLI::Commands::Sync do
     it 'returns 0' do
       expect(run_command('--help')).to eq(0)
     end
+
+    it 'includes ledger sync flags in help' do
+      expect { run_command('--help') }.to output(/--setup-ledger/).to_stdout
+    end
+  end
+
+  # ------------------------------------------------------------------
+  # Ledger Sync Flags
+  # ------------------------------------------------------------------
+
+  describe 'ledger sync operations' do
+    let(:git_adapter) { instance_double(Eluent::Sync::GitAdapter) }
+    let(:ledger_syncer) { instance_double(Eluent::Sync::LedgerSyncer) }
+    let(:ledger_sync_state) { instance_double(Eluent::Sync::LedgerSyncState) }
+    let(:global_paths) { instance_double(Eluent::Storage::GlobalPaths) }
+
+    before do
+      allow(Eluent::Sync::GitAdapter).to receive(:new).and_return(git_adapter)
+      allow(git_adapter).to receive(:remote?).and_return(true)
+    end
+
+    describe '--status (without ledger sync configured)' do
+      before do
+        allow(Eluent::Storage::GlobalPaths).to receive(:new).and_return(global_paths)
+        allow(Eluent::Sync::LedgerSyncState).to receive(:new).and_return(ledger_sync_state)
+        allow(ledger_sync_state).to receive(:load).and_return(ledger_sync_state)
+        allow(ledger_sync_state).to receive(:last_pull_at).and_return(nil)
+        allow(ledger_sync_state).to receive(:last_push_at).and_return(nil)
+        allow(ledger_sync_state).to receive(:ledger_head).and_return(nil)
+        allow(ledger_sync_state).to receive(:valid?).and_return(false)
+        allow(ledger_sync_state).to receive(:offline_claims).and_return([])
+        allow(ledger_sync_state).to receive(:offline_claims?).and_return(false)
+      end
+
+      it 'returns 0' do
+        expect(run_command('--status', robot_mode: true)).to eq(0)
+      end
+
+      it 'shows ledger sync is not configured' do
+        output = capture_stdout { run_command('--status', robot_mode: true) }
+        parsed = JSON.parse(output)
+
+        expect(parsed['status']).to eq('ok')
+        expect(parsed['data']['ledger_sync_enabled']).to be false
+      end
+    end
+
+    context 'with ledger sync configured' do
+      let(:setup_result) do
+        Eluent::Sync::LedgerSyncer::SetupResult.new(
+          success: true,
+          created_branch: true,
+          created_worktree: true
+        )
+      end
+      let(:sync_result) do
+        Eluent::Sync::LedgerSyncer::SyncResult.new(
+          success: true,
+          changes_applied: 1
+        )
+      end
+
+      before do
+        File.write(
+          File.join(root_path, '.eluent', 'config.yaml'),
+          YAML.dump('repo_name' => 'testrepo', 'sync' => { 'ledger_branch' => 'eluent-sync' })
+        )
+
+        allow(Eluent::Storage::GlobalPaths).to receive(:new).and_return(global_paths)
+        allow(Eluent::Sync::LedgerSyncer).to receive(:new).and_return(ledger_syncer)
+        allow(Eluent::Sync::LedgerSyncState).to receive(:new).and_return(ledger_sync_state)
+
+        allow(global_paths).to receive(:sync_worktree_dir).and_return('/home/user/.eluent/testrepo/.sync-worktree')
+
+        allow(ledger_sync_state).to receive(:load).and_return(ledger_sync_state)
+        allow(ledger_sync_state).to receive(:exists?).and_return(false)
+        allow(ledger_sync_state).to receive(:reset!)
+        allow(ledger_sync_state).to receive(:last_pull_at).and_return(nil)
+        allow(ledger_sync_state).to receive(:last_push_at).and_return(nil)
+        allow(ledger_sync_state).to receive(:ledger_head).and_return(nil)
+        allow(ledger_sync_state).to receive(:valid?).and_return(false)
+        allow(ledger_sync_state).to receive(:offline_claims).and_return([])
+        allow(ledger_sync_state).to receive(:offline_claims?).and_return(false)
+      end
+
+      describe '--setup-ledger' do
+        before do
+          allow(ledger_syncer).to receive(:setup!).and_return(setup_result)
+        end
+
+        it 'calls setup! on ledger syncer' do
+          run_command('--setup-ledger', robot_mode: true)
+          expect(ledger_syncer).to have_received(:setup!)
+        end
+
+        it 'returns 0 on success' do
+          expect(run_command('--setup-ledger', robot_mode: true)).to eq(0)
+        end
+
+        it 'outputs setup result' do
+          output = capture_stdout { run_command('--setup-ledger', robot_mode: true) }
+          parsed = JSON.parse(output)
+
+          expect(parsed['status']).to eq('ok')
+          expect(parsed['data']['created_branch']).to be true
+          expect(parsed['data']['created_worktree']).to be true
+        end
+
+        context 'when setup fails' do
+          let(:setup_result) do
+            Eluent::Sync::LedgerSyncer::SetupResult.new(
+              success: false,
+              error: 'Failed to create branch'
+            )
+          end
+
+          it 'returns 1' do
+            expect(run_command('--setup-ledger', robot_mode: true)).to eq(1)
+          end
+
+          it 'outputs error' do
+            output = capture_stdout { run_command('--setup-ledger', robot_mode: true) }
+            parsed = JSON.parse(output)
+
+            expect(parsed['status']).to eq('error')
+            expect(parsed['error']['code']).to eq('SETUP_FAILED')
+          end
+        end
+      end
+
+      describe '--ledger-only' do
+        before do
+          allow(ledger_syncer).to receive(:available?).and_return(true)
+          allow(ledger_syncer).to receive(:pull_ledger).and_return(sync_result)
+          allow(ledger_syncer).to receive(:push_ledger).and_return(sync_result)
+          allow(ledger_syncer).to receive(:sync_to_main).and_return(sync_result)
+        end
+
+        it 'performs ledger pull and push' do
+          run_command('--ledger-only', robot_mode: true)
+
+          expect(ledger_syncer).to have_received(:pull_ledger)
+          expect(ledger_syncer).to have_received(:push_ledger)
+          expect(ledger_syncer).to have_received(:sync_to_main)
+        end
+
+        it 'returns 0 on success' do
+          expect(run_command('--ledger-only', robot_mode: true)).to eq(0)
+        end
+
+        context 'when syncer not available' do
+          before do
+            allow(ledger_syncer).to receive(:available?).and_return(false)
+          end
+
+          it 'returns 1 with setup message' do
+            output = capture_stdout { run_command('--ledger-only', robot_mode: true) }
+            parsed = JSON.parse(output)
+
+            expect(parsed['status']).to eq('error')
+            expect(parsed['error']['code']).to eq('LEDGER_NOT_SETUP')
+          end
+        end
+      end
+
+      describe '--cleanup-ledger' do
+        before do
+          allow(ledger_syncer).to receive(:available?).and_return(true)
+          allow(ledger_syncer).to receive(:teardown!)
+        end
+
+        it 'requires --force or --yes' do
+          expect(run_command('--cleanup-ledger', robot_mode: true)).to eq(1)
+        end
+
+        it 'calls teardown! with --force' do
+          run_command('--cleanup-ledger', '--force', robot_mode: true)
+          expect(ledger_syncer).to have_received(:teardown!)
+        end
+
+        it 'calls teardown! with --yes' do
+          run_command('--cleanup-ledger', '--yes', robot_mode: true)
+          expect(ledger_syncer).to have_received(:teardown!)
+        end
+
+        it 'returns 0 on success' do
+          expect(run_command('--cleanup-ledger', '--yes', robot_mode: true)).to eq(0)
+        end
+      end
+
+      describe '--reconcile' do
+        before do
+          allow(ledger_syncer).to receive(:available?).and_return(true)
+          allow(ledger_syncer).to receive(:reconcile_offline_claims!).and_return([])
+        end
+
+        context 'with no offline claims' do
+          it 'returns 0' do
+            expect(run_command('--reconcile', robot_mode: true)).to eq(0)
+          end
+
+          it 'outputs no claims message' do
+            output = capture_stdout { run_command('--reconcile', robot_mode: true) }
+            parsed = JSON.parse(output)
+
+            expect(parsed['status']).to eq('ok')
+          end
+        end
+
+        context 'with offline claims' do
+          let(:offline_claim) do
+            Eluent::Sync::OfflineClaim.new(
+              atom_id: 'test-atom',
+              agent_id: 'test-agent',
+              claimed_at: Time.now
+            )
+          end
+
+          before do
+            allow(ledger_sync_state).to receive(:offline_claims?).and_return(true)
+            allow(ledger_sync_state).to receive(:offline_claims).and_return([offline_claim])
+          end
+
+          it 'calls reconcile_offline_claims!' do
+            run_command('--reconcile', robot_mode: true)
+            expect(ledger_syncer).to have_received(:reconcile_offline_claims!)
+          end
+
+          it 'returns 0' do
+            expect(run_command('--reconcile', robot_mode: true)).to eq(0)
+          end
+        end
+      end
+
+      describe '--force-resync' do
+        before do
+          allow(ledger_syncer).to receive(:available?).and_return(true)
+          allow(ledger_syncer).to receive(:teardown!)
+          allow(ledger_syncer).to receive(:setup!).and_return(setup_result)
+          allow(ledger_syncer).to receive(:pull_ledger).and_return(sync_result)
+          allow(ledger_syncer).to receive(:sync_to_main).and_return(sync_result)
+        end
+
+        it 'requires --yes confirmation' do
+          expect(run_command('--force-resync', robot_mode: true)).to eq(1)
+        end
+
+        it 'performs teardown and setup with --yes' do
+          run_command('--force-resync', '--yes', robot_mode: true)
+
+          expect(ledger_syncer).to have_received(:teardown!)
+          expect(ledger_syncer).to have_received(:setup!)
+          expect(ledger_syncer).to have_received(:pull_ledger)
+        end
+
+        it 'returns 0 on success' do
+          expect(run_command('--force-resync', '--yes', robot_mode: true)).to eq(0)
+        end
+      end
+
+      describe '--status' do
+        before do
+          allow(ledger_syncer).to receive(:available?).and_return(true)
+          allow(ledger_syncer).to receive(:healthy?).and_return(true)
+          allow(ledger_syncer).to receive(:online?).and_return(true)
+        end
+
+        it 'returns 0' do
+          expect(run_command('--status', robot_mode: true)).to eq(0)
+        end
+
+        it 'outputs status information' do
+          output = capture_stdout { run_command('--status', robot_mode: true) }
+          parsed = JSON.parse(output)
+
+          expect(parsed['status']).to eq('ok')
+          expect(parsed['data']['ledger_sync_enabled']).to be true
+          expect(parsed['data']['ledger_branch']).to eq('eluent-sync')
+          expect(parsed['data']['available']).to be true
+          expect(parsed['data']['healthy']).to be true
+          expect(parsed['data']['online']).to be true
+        end
+      end
+    end
+
+    context 'without ledger sync configured' do
+      describe '--setup-ledger' do
+        it 'returns error' do
+          output = capture_stdout { run_command('--setup-ledger', robot_mode: true) }
+          parsed = JSON.parse(output)
+
+          expect(parsed['status']).to eq('error')
+          expect(parsed['error']['code']).to eq('LEDGER_NOT_CONFIGURED')
+        end
+      end
+
+      describe '--ledger-only' do
+        before do
+          allow(git_adapter).to receive(:remote?).and_return(true)
+        end
+
+        it 'returns error' do
+          output = capture_stdout { run_command('--ledger-only', robot_mode: true) }
+          parsed = JSON.parse(output)
+
+          expect(parsed['status']).to eq('error')
+          expect(parsed['error']['code']).to eq('LEDGER_NOT_CONFIGURED')
+        end
+      end
+    end
   end
 
   private

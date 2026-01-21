@@ -1,10 +1,19 @@
 # frozen_string_literal: true
 
+require_relative '../../sync/ledger_syncer'
+require_relative '../../sync/ledger_sync_state'
+require_relative '../../storage/global_paths'
+require_relative '../concerns/ledger_sync_support'
+require_relative '../presenters/ledger_status_presenter'
+require_relative '../presenters/sync_result_presenter'
+
 module Eluent
   module CLI
     module Commands
       # Synchronize with git remote
       class Sync < BaseCommand
+        include Concerns::LedgerSyncSupport
+
         usage do
           program 'el sync'
           desc 'Synchronize with git remote'
@@ -12,6 +21,9 @@ module Eluent
           example 'el sync --pull-only', 'Only pull remote changes'
           example 'el sync --push-only', 'Only push local changes'
           example 'el sync --dry-run', 'Show what would change'
+          example 'el sync --setup-ledger', 'Initialize ledger sync branch and worktree'
+          example 'el sync --ledger-only', 'Sync only the ledger branch (fast)'
+          example 'el sync --status', 'Show ledger sync status'
         end
 
         flag :pull_only do
@@ -35,6 +47,46 @@ module Eluent
           desc 'Force sync even with in-progress items'
         end
 
+        # ------------------------------------------------------------------
+        # Ledger Sync Flags
+        # ------------------------------------------------------------------
+
+        flag :setup_ledger do
+          long '--setup-ledger'
+          desc 'Initialize ledger sync: create branch and worktree'
+        end
+
+        flag :ledger_only do
+          long '--ledger-only'
+          desc 'Fast sync: only pull/push .eluent/, skip code'
+        end
+
+        flag :cleanup_ledger do
+          long '--cleanup-ledger'
+          desc 'Remove ledger worktree and state (disable feature)'
+        end
+
+        flag :reconcile do
+          long '--reconcile'
+          desc 'Push pending offline claims, report conflicts'
+        end
+
+        flag :force_resync do
+          long '--force-resync'
+          desc 'Reset local ledger state from remote (destructive)'
+        end
+
+        flag :status do
+          long '--status'
+          desc 'Show ledger sync health and pending offline claims'
+        end
+
+        flag :yes do
+          short '-y'
+          long '--yes'
+          desc 'Confirm destructive operations without prompting'
+        end
+
         flag :help do
           short '-h'
           long '--help'
@@ -49,8 +101,136 @@ module Eluent
 
           ensure_initialized!
           return 1 unless ensure_git_repo!
+
+          # Handle ledger-specific commands first (some don't need remote)
+          return handle_status if params[:status]
+          return handle_cleanup_ledger if params[:cleanup_ledger]
+
           return 1 unless ensure_remote!
 
+          # Ledger operations
+          return handle_setup_ledger if params[:setup_ledger]
+          return handle_ledger_only if params[:ledger_only]
+          return handle_reconcile if params[:reconcile]
+          return handle_force_resync if params[:force_resync]
+
+          # Standard sync
+          perform_standard_sync
+        end
+
+        private
+
+        # ------------------------------------------------------------------
+        # Ledger Operations
+        # ------------------------------------------------------------------
+
+        def handle_setup_ledger
+          return error_ledger_not_configured unless ledger_sync_enabled?
+
+          syncer = build_ledger_syncer
+          result = syncer.setup!
+
+          if result.success
+            output_setup_success(result)
+            0
+          else
+            error('SETUP_FAILED', result.error)
+            1
+          end
+        end
+
+        def handle_ledger_only
+          return error_ledger_not_configured unless ledger_sync_enabled?
+
+          syncer = build_ledger_syncer
+          unless syncer.available?
+            return error('LEDGER_NOT_SETUP', 'Ledger sync not initialized. Run: el sync --setup-ledger')
+          end
+
+          # Pull then push
+          pull_result = syncer.pull_ledger
+          return error('PULL_FAILED', pull_result.error) unless pull_result.success
+
+          push_result = syncer.push_ledger
+          return error('PUSH_FAILED', push_result.error) unless push_result.success
+
+          # Copy to main working tree
+          syncer.sync_to_main
+
+          output_ledger_sync_success
+          0
+        end
+
+        def handle_cleanup_ledger
+          return error_ledger_not_configured unless ledger_sync_enabled?
+
+          syncer = build_ledger_syncer
+
+          # Check for uncommitted changes in worktree
+          if syncer.available? && !params[:force] && !params[:yes]
+            warn 'el: warning: this will remove the ledger worktree and local state'
+            warn 'el: use --force or --yes to confirm'
+            return 1
+          end
+
+          syncer.teardown!
+          ledger_sync_state.reset! if ledger_sync_state.exists?
+
+          success('Ledger sync disabled and worktree removed')
+        end
+
+        def handle_reconcile
+          return error_ledger_not_configured unless ledger_sync_enabled?
+
+          syncer = build_ledger_syncer
+          unless syncer.available?
+            return error('LEDGER_NOT_SETUP', 'Ledger sync not initialized. Run: el sync --setup-ledger')
+          end
+
+          state = ledger_sync_state.load
+          return success('No offline claims to reconcile') unless state.offline_claims?
+
+          results = syncer.reconcile_offline_claims!
+          output_reconcile_results(results, state)
+          0
+        end
+
+        def handle_force_resync
+          return error_ledger_not_configured unless ledger_sync_enabled?
+
+          unless params[:yes]
+            warn 'el: warning: --force-resync will discard local ledger state'
+            warn 'el: use --yes to confirm'
+            return 1
+          end
+
+          syncer = build_ledger_syncer
+
+          # Teardown and re-setup
+          syncer.teardown! if syncer.available?
+          ledger_sync_state.reset!
+
+          result = syncer.setup!
+          return error('RESYNC_FAILED', result.error) unless result.success
+
+          # Pull fresh state from remote
+          pull_result = syncer.pull_ledger
+          return error('PULL_FAILED', pull_result.error) unless pull_result.success
+
+          syncer.sync_to_main
+          success('Ledger state reset from remote')
+        end
+
+        def handle_status
+          output_ledger_status
+          0
+        end
+
+        # ------------------------------------------------------------------
+        # Standard Sync
+        # ------------------------------------------------------------------
+
+        def perform_standard_sync
           orchestrator = build_orchestrator
 
           result = orchestrator.sync(
@@ -63,19 +243,33 @@ module Eluent
           output_result(result)
         end
 
-        private
+        # ------------------------------------------------------------------
+        # Validation
+        # ------------------------------------------------------------------
 
         def ensure_git_repo!
           return true if repository.paths.git_repo?
 
           error('NO_GIT_REPO', 'Not a git repository')
+          false
         end
 
         def ensure_remote!
           return true if git_adapter.remote?
 
           error('NO_REMOTE', 'No git remote configured. Add a remote with: git remote add origin <url>')
+          false
         end
+
+        def error_ledger_not_configured
+          error('LEDGER_NOT_CONFIGURED',
+                'sync.ledger_branch not set in config. ' \
+                'Add `sync: { ledger_branch: "eluent-sync" }` to .eluent/config.yaml')
+        end
+
+        # ------------------------------------------------------------------
+        # Builders
+        # ------------------------------------------------------------------
 
         def build_orchestrator
           Eluent::Sync::PullFirstOrchestrator.new(
@@ -85,69 +279,80 @@ module Eluent
           )
         end
 
-        def git_adapter
-          @git_adapter ||= Eluent::Sync::GitAdapter.new(repo_path: repository.paths.root)
-        end
-
         def sync_state
           @sync_state ||= Eluent::Sync::SyncState.new(paths: repository.paths).load
         end
 
-        def output_result(result)
-          if @robot_mode
-            output_json(result)
-          else
-            output_text(result)
-          end
-
-          result.success? || result.up_to_date? ? 0 : 1
+        def ledger_sync_state
+          @ledger_sync_state ||= build_ledger_sync_state
         end
 
-        def output_json(result)
+        # ------------------------------------------------------------------
+        # Output Helpers
+        # ------------------------------------------------------------------
+
+        def output_setup_success(result)
           data = {
-            status: result.status.to_s,
-            changes: result.changes,
-            conflicts: result.conflicts,
-            commits: result.commits
+            created_branch: result.created_branch,
+            created_worktree: result.created_worktree,
+            branch: sync_config['ledger_branch'],
+            worktree_path: global_paths.sync_worktree_dir
           }
 
-          if result.success?
+          if @robot_mode
             puts JSON.generate({ status: 'ok', data: data })
           else
-            puts JSON.generate({
-                                 status: 'error',
-                                 error: { code: 'SYNC_FAILED', message: 'Sync completed with conflicts' },
-                                 data: data
-                               })
+            if result.created_branch
+              puts "#{@pastel.green('el:')} Created ledger branch: #{sync_config['ledger_branch']}"
+            end
+            if result.created_worktree
+              puts "#{@pastel.green('el:')} Created worktree at: #{global_paths.sync_worktree_dir}"
+            end
+            unless result.created_branch || result.created_worktree
+              puts "#{@pastel.green('el:')} Ledger sync already configured"
+            end
           end
         end
 
-        def output_text(result)
-          case result.status
-          when :up_to_date
-            puts "#{@pastel.green('el:')} Already up to date"
-          when :success
-            output_changes(result)
-            puts "#{@pastel.green('el:')} Sync complete"
-          when :conflicted
-            output_changes(result)
-            warn "#{@pastel.yellow('el: warning:')} Sync completed with #{result.conflicts.size} conflicts"
+        def output_ledger_sync_success
+          if @robot_mode
+            puts JSON.generate({ status: 'ok', data: { action: 'ledger_sync' } })
+          else
+            puts "#{@pastel.green('el:')} Ledger synced"
           end
         end
 
-        def output_changes(result)
-          return if result.changes.empty?
+        def output_reconcile_results(results, state)
+          # Results are placeholder (empty) until Phase 4 integration
+          claims_count = state.offline_claims.size
+          data = {
+            offline_claims: claims_count,
+            reconciled: results.size,
+            conflicts: []
+          }
 
-          puts 'Changes:'
-          result.changes.each do |change|
-            icon = case change[:type]
-                   when :added then @pastel.green('+')
-                   when :removed then @pastel.red('-')
-                   when :modified then @pastel.yellow('~')
-                   else '?'
-                   end
-            puts "  #{icon} #{change[:record_type]}: #{change[:title] || change[:id]}"
+          if @robot_mode
+            puts JSON.generate({ status: 'ok', data: data })
+          else
+            puts "#{@pastel.green('el:')} #{claims_count} offline claims pending reconciliation"
+            puts '    (reconciliation logic pending - claims will sync on next push)'
           end
+        end
+
+        def output_ledger_status
+          presenter = Presenters::LedgerStatusPresenter.new(pastel: @pastel)
+          presenter.present(
+            state: ledger_sync_state.load,
+            syncer: ledger_sync_enabled? ? build_ledger_syncer : nil,
+            sync_config: sync_config,
+            global_paths: global_paths,
+            robot_mode: @robot_mode
+          )
+        end
+
+        def output_result(result)
+          presenter = Presenters::SyncResultPresenter.new(pastel: @pastel)
+          presenter.present(result: result, robot_mode: @robot_mode)
         end
       end
     end

@@ -15,13 +15,13 @@ This document tracks progress towards completing the Ledger Branch feature defin
 | Phase 3: LedgerSyncer Core | Complete | 100% |
 | Phase 4: LedgerSyncState | Complete | 100% |
 | Phase 5: ConfigLoader Updates | Complete | 100% |
-| Phase 6: CLI Commands | Not Started | 0% |
+| Phase 6: CLI Commands | Complete | 100% |
 | Phase 7: Daemon Integration | Not Started | 0% |
 | Phase 8: ExecutionLoop Integration | Not Started | 0% |
 | Phase 9: Stale Worktree Recovery | Not Started | 0% |
 | Phase 10: Stale Claim Management | Not Started | 0% |
 
-**Current State**: Phase 5 complete. Ready to start Phase 6.
+**Current State**: Phase 6 complete. Ready to start Phase 7.
 
 ---
 
@@ -201,28 +201,37 @@ Add `sync:` config section with ledger options.
 
 ### Implementation
 
-- [ ] `lib/eluent/cli/commands/claim.rb` — Claim command with:
-  - [ ] `el claim ATOM_ID`
-  - [ ] `--agent-id` option
-  - [ ] `--offline` option
-  - [ ] `--force` option
-  - [ ] `--quiet` option
-  - [ ] Exit codes (0-5)
-- [ ] `lib/eluent/cli/commands/sync.rb` — Add flags:
-  - [ ] `--setup-ledger`
-  - [ ] `--ledger-only`
-  - [ ] `--cleanup-ledger`
-  - [ ] `--reconcile`
-  - [ ] `--force-resync`
-  - [ ] `--status`
-- [ ] `lib/eluent/cli/application.rb` — Add:
-  - [ ] Register `claim` command
-  - [ ] `ExitCodes` module constants
+- [x] `lib/eluent/cli/commands/claim.rb` — Claim command with:
+  - [x] `el claim ATOM_ID`
+  - [x] `--agent-id` option
+  - [x] `--offline` option
+  - [x] `--force` option
+  - [x] `--quiet` option
+  - [x] Exit codes (0-5 via `ExitCodes` module)
+- [x] `lib/eluent/cli/commands/sync.rb` — Add flags:
+  - [x] `--setup-ledger`
+  - [x] `--ledger-only`
+  - [x] `--cleanup-ledger`
+  - [x] `--reconcile`
+  - [x] `--force-resync`
+  - [x] `--status`
+  - [x] `--yes` (confirmation for destructive operations)
+- [x] `lib/eluent/cli/application.rb` — Add:
+  - [x] Register `claim` command
+  - [x] Ledger-related error codes in `ERROR_CODES` and `EXIT_CODES`
 
 ### Specs
 
-- [ ] `spec/eluent/cli/commands/claim_spec.rb`
-- [ ] `spec/eluent/cli/commands/sync_spec.rb` — Extended specs for new flags
+- [x] `spec/eluent/cli/commands/claim_spec.rb` (40 examples, 0 failures)
+- [x] `spec/eluent/cli/commands/sync_spec.rb` — Extended specs for new flags (32 examples, 0 failures)
+
+### Implementation Notes
+
+- The claim command supports both local-only claiming (default without ledger sync) and remote-synced claiming (with ledger sync configured)
+- When ledger sync is configured but unavailable, claims fall back to local with offline claim recording
+- Exit codes are defined in `Eluent::CLI::Commands::ExitCodes` module for scripting
+- The sync command --status shows comprehensive ledger sync health including offline claims count
+- Destructive operations (--cleanup-ledger, --force-resync) require --yes or --force confirmation
 
 ---
 
