@@ -29,6 +29,7 @@ require_relative 'eluent/storage/serializers/atom_serializer'
 require_relative 'eluent/storage/serializers/bond_serializer'
 require_relative 'eluent/storage/serializers/comment_serializer'
 require_relative 'eluent/storage/jsonl_repository'
+require_relative 'eluent/storage/global_paths'
 
 # Registry
 require_relative 'eluent/registry/id_generator'
@@ -43,11 +44,14 @@ require_relative 'eluent/graph/blocking_resolver'
 require_relative 'eluent/lifecycle/readiness_calculator'
 
 # Sync
+require_relative 'eluent/sync/errors'
 require_relative 'eluent/sync/sync_state'
+require_relative 'eluent/sync/ledger_sync_state'
 require_relative 'eluent/sync/git_adapter'
 require_relative 'eluent/sync/conflict_resolver'
 require_relative 'eluent/sync/merge_engine'
 require_relative 'eluent/sync/pull_first_orchestrator'
+require_relative 'eluent/sync/ledger_syncer'
 
 # Registry extensions
 require_relative 'eluent/registry/repo_registry'

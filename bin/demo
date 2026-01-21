@@ -666,6 +666,149 @@ puts <<~MSG
 MSG
 
 # ============================================================
+section '19. LEDGER SYNC SETUP'
+# ============================================================
+
+puts <<~MSG
+
+  \e[33mNote: Ledger Sync enables multi-agent coordination via an orphan branch.\e[0m
+  It provides atomic claims so multiple agents can safely share work without races.
+
+MSG
+
+step 'Create a bare remote repository (simulating remote server)'
+REMOTE_REPO = DEMO_DIR.parent / 'demo-remote.git'
+FileUtils.rm_rf(REMOTE_REPO)
+system("git init --bare #{REMOTE_REPO} -q")
+puts "  -> Created bare repo at #{REMOTE_REPO}"
+
+step 'Add remote to the demo repository'
+system("cd #{DEMO_DIR} && git remote add origin #{REMOTE_REPO}")
+
+step 'Make initial commit and push to establish remote tracking'
+system("cd #{DEMO_DIR} && git add -A && git commit -m 'Initial eluent setup' -q")
+system("cd #{DEMO_DIR} && git branch -M main && git push -u origin main -q 2>&1")
+
+step 'Configure ledger sync branch in config'
+el 'config set sync.ledger_branch eluent-sync'
+
+step 'Show sync configuration'
+el 'config get sync.ledger_branch'
+
+step 'Initialize ledger sync (creates orphan branch and worktree)'
+el 'sync --setup-ledger'
+
+step 'Show ledger sync status'
+el 'sync --status'
+
+# ============================================================
+section '20. ATOMIC CLAIMS'
+# ============================================================
+
+step 'Claim a task atomically (with ledger sync)'
+el "claim #{task1_id} --agent-id agent-alpha"
+
+step 'Show the claimed task (notice assignee and in_progress status)'
+el "show #{task1_id}"
+
+step 'Try to claim an already-claimed task (will fail with CLAIM_CONFLICT)'
+el "claim #{task1_id} --agent-id agent-beta"
+
+step 'Force-claim to steal from another agent'
+el "claim #{task1_id} --agent-id agent-beta --force"
+
+step 'Show task now assigned to agent-beta'
+el "show #{task1_id}"
+
+step 'Claim with default agent ID (uses hostname)'
+el "claim #{task2_id}"
+
+step 'Claim in quiet mode (for scripting)'
+el "claim #{task3_id} --agent-id scripted-agent --quiet"
+puts '  -> (quiet mode produces no output on success)'
+
+step 'List in-progress items (shows claimed work)'
+el 'list -s in_progress'
+
+step 'Claim command in robot mode'
+el "claim #{task4_id} --agent-id robot-agent --robot"
+
+# ============================================================
+section '21. LEDGER-ONLY SYNC (Fast)'
+# ============================================================
+
+step 'Perform ledger-only sync (syncs only .eluent/, faster than full sync)'
+el 'sync --ledger-only'
+
+step 'Check sync status after ledger sync'
+el 'sync --status'
+
+step 'Standard sync (includes both code and ledger)'
+el 'sync'
+
+# ============================================================
+section '22. OFFLINE MODE WITH RECONCILIATION'
+# ============================================================
+
+step 'Create a new task for offline demo'
+output = el "create -t 'Offline mode test task' --type task", capture: true
+offline_task_id = output[/Created \w+ (\w+):/, 1]
+puts "  -> task ID: #{offline_task_id}"
+
+step 'Claim an item in offline mode (local-only, queued for later sync)'
+el "claim #{offline_task_id} --agent-id offline-agent --offline"
+
+step 'Check sync status (shows pending offline claim)'
+el 'sync --status'
+
+step 'Reconcile offline claims (push pending claims to remote)'
+el 'sync --reconcile'
+
+step 'Verify reconciliation complete (no pending claims)'
+el 'sync --status'
+
+# ============================================================
+section '23. CLAIM EXIT CODES'
+# ============================================================
+
+puts <<~MSG
+
+  \e[33mClaim command uses specific exit codes for scripting:\e[0m
+    0 - SUCCESS: Claim successful
+    1 - CLAIM_CONFLICT: Already claimed by another agent
+    2 - CLAIM_RETRIES: Max retries exhausted (persistent conflict)
+    3 - LEDGER_NOT_CONFIGURED: Ledger sync not available
+    4 - ATOM_NOT_FOUND: Atom does not exist
+    5 - ATOM_TERMINAL: Cannot claim closed/discarded atom
+
+MSG
+
+step 'Try to claim a closed atom (exit code 5)'
+# Close an atom first
+el "close #{offline_task_id} -r 'Completed'"
+el "claim #{offline_task_id} --agent-id test-agent"
+puts '  -> Exit code indicates atom is in terminal state'
+
+step 'Try to claim a non-existent atom (exit code 4)'
+el 'claim NOTEXIST --agent-id test-agent'
+puts '  -> Exit code indicates atom not found'
+
+# ============================================================
+section '24. LEDGER CLEANUP'
+# ============================================================
+
+step 'Clean up ledger sync infrastructure'
+el 'sync --cleanup-ledger --yes'
+
+step 'Verify ledger is disabled'
+el 'sync --status'
+
+step 'Claims now fall back to local-only mode'
+output = el "create -t 'Post-cleanup task' --type task", capture: true
+post_cleanup_id = output[/Created \w+ (\w+):/, 1]
+el "claim #{post_cleanup_id} --agent-id local-agent"
+
+# ============================================================
 section 'SUMMARY'
 # ============================================================
 
@@ -685,6 +828,14 @@ Dir.glob("#{DEMO_DIR}/.eluent/plugins/*").each do |f|
   puts "  #{File.basename(f)}"
 end
 
+puts "\n\e[35mFormulas directory:\e[0m"
+Dir.glob("#{DEMO_DIR}/.eluent/formulas/*").each do |f|
+  puts "  #{File.basename(f)}"
+end
+
+puts "\n\e[35mRemote repository (simulated):\e[0m"
+puts "  #{REMOTE_REPO}"
+
 puts "\n\e[35mData file contents:\e[0m"
 data_file = DEMO_DIR / '.eluent' / 'data.jsonl'
 File.readlines(data_file).each do |line|
@@ -702,3 +853,13 @@ File.readlines(data_file).each do |line|
     puts "\e[36m[COMMENT]\e[0m #{data[:author]}: #{data[:content][0, 40]}..."
   end
 end
+
+puts "\n\e[35mFeatures demonstrated:\e[0m"
+puts '  1-11:  Core atom/bond/comment management'
+puts '  12-15: Dependencies, ready queue, soft delete, formulas'
+puts '  16-18: Compaction, plugins, AI agent integration'
+puts '  19-24: Ledger sync (atomic claims, offline mode, reconciliation)'
+
+puts "\n\e[35mCleaning up remote repository...\e[0m"
+FileUtils.rm_rf(REMOTE_REPO)
+puts '  -> Removed simulated remote'

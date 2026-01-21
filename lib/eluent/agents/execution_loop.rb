@@ -2,18 +2,45 @@
 
 module Eluent
   module Agents
+    # Outcome of an atom claim attempt.
+    #
+    # @!attribute success [Boolean] whether the claim succeeded
+    # @!attribute reason [String, nil] failure reason if unsuccessful
+    # @!attribute local_only [Boolean] true if claim exists only in local repository (not synced to remote)
+    # @!attribute fallback [Boolean] true if remote sync was attempted but failed, triggering local fallback
+    # @!attribute error [String, nil] error message when fallback occurred
+    ClaimOutcome = Data.define(:success, :reason, :local_only, :fallback, :error) do
+      def initialize(success:, reason: nil, local_only: false, fallback: false, error: nil)
+        super
+      end
+
+      def success? = success
+      def failed? = !success
+      def local_only? = local_only
+      def fallback? = fallback
+    end
+
     # Standard agent work loop
     # Queries ready work, claims atoms, executes via executor, handles results
     class ExecutionLoop
       # @param repository [Storage::JsonlRepository] Repository to work with
       # @param executor [AgentExecutor] Executor for running agent on atoms
       # @param git_adapter [Sync::GitAdapter, nil] Optional git adapter for syncing
+      # @param ledger_syncer [Sync::LedgerSyncer, nil] Optional ledger syncer for atomic claims
+      # @param ledger_sync_state [Sync::LedgerSyncState, nil] State tracker for offline claims
       # @param configuration [Configuration] Agent configuration
-      def initialize(repository:, executor:, configuration:, git_adapter: nil)
+      # @param sync_config [Hash] Sync configuration (offline_mode, etc.)
+      # @param clock [#now] Time source for timestamps (defaults to Time, injectable for testing)
+      def initialize(repository:, executor:, configuration:, git_adapter: nil,
+                     ledger_syncer: nil, ledger_sync_state: nil, sync_config: {}, clock: Time)
         @repository = repository
         @executor = executor
         @git_adapter = git_adapter
+        @ledger_syncer = ledger_syncer
+        @ledger_sync_state = ledger_sync_state
         @configuration = configuration
+        @sync_config = sync_config
+        @clock = clock
         @running = false
         @processed_count = 0
         @error_count = 0
@@ -76,7 +103,8 @@ module Eluent
 
       private
 
-      attr_reader :repository, :executor, :git_adapter, :configuration
+      attr_reader :repository, :executor, :git_adapter, :ledger_syncer, :ledger_sync_state,
+                  :configuration, :sync_config, :clock
       attr_accessor :running, :processed_count, :error_count
 
       def find_ready_work(assignee_filter:, type_filter:)
@@ -101,39 +129,136 @@ module Eluent
       end
 
       def process_atom(atom)
-        claimed = claim_atom(atom)
-        return ExecutionResult.failure(error: 'Failed to claim atom', atom: atom) unless claimed
+        claim_outcome = claim_atom(atom)
+        unless claim_outcome.success?
+          return ExecutionResult.failure(error: claim_outcome.reason || 'Failed to claim atom', atom: atom)
+        end
 
         sync_before_work if git_adapter
 
         result = executor.execute(atom)
 
         handle_result(atom, result)
-        sync_after_work if git_adapter && result.success
+        sync_after_work(result.success)
 
         result
       rescue StandardError => e
-        release_claim(atom)
+        release_claim_on_failure(atom)
         ExecutionResult.failure(error: e.message, atom: atom)
       end
 
-      # Claim an atom for processing by this agent
-      # NOTE: This has a TOCTOU race condition between checking status and updating.
-      # Multiple agents could simultaneously claim the same atom. For multi-agent
-      # deployments, the repository should implement optimistic locking (version field)
-      # or atomic compare-and-swap semantics. Single-agent usage is safe.
+      # Claims an atom for processing by this agent.
+      #
+      # When a ledger syncer is available, performs an atomic remote claim with
+      # conflict detection and retry. Falls back to local-only claiming when:
+      # - No ledger syncer is configured
+      # - Remote is unavailable and offline_mode is 'local'
+      #
+      # @param atom [Models::Atom] The atom to claim
+      # @return [ClaimOutcome] Result indicating success/failure and offline status
       def claim_atom(atom)
-        return false if atom.status == Models::Status[:in_progress] && atom.assignee != configuration.agent_id
+        return claim_with_ledger_sync(atom) if ledger_syncer_available?
+
+        claim_locally(atom)
+      rescue Sync::LedgerSyncerError, Sync::WorktreeError, Sync::BranchError, Sync::GitError => e
+        handle_ledger_sync_failure(atom, e)
+      end
+
+      # Safely checks if ledger syncer is available without raising.
+      def ledger_syncer_available?
+        ledger_syncer&.available?
+      rescue Sync::WorktreeError, Sync::BranchError, Sync::GitError
+        false
+      end
+
+      # Releases a claim on failure, allowing other agents to pick up the work.
+      #
+      # Attempts remote release if ledger syncer is available. Always releases
+      # locally regardless of remote outcome. Remote failures are logged but
+      # don't propagate since the claim will eventually timeout or be manually released.
+      #
+      # @param atom [Models::Atom] The atom to release
+      def release_claim_on_failure(atom)
+        ledger_syncer.release_claim(atom_id: atom.id) if ledger_syncer_available?
+      rescue Sync::LedgerSyncerError, Sync::WorktreeError, Sync::BranchError, Sync::GitError => e
+        warn "[ExecutionLoop] Ledger release failed for #{atom.id}: #{e.message}" if $DEBUG
+      ensure
+        release_claim_locally(atom)
+      end
+
+      # Performs atomic claim via ledger syncer with retry on conflict.
+      def claim_with_ledger_sync(atom)
+        result = ledger_syncer.claim_and_push(atom_id: atom.id, agent_id: configuration.agent_id)
+
+        if result.success
+          reload_repository_after_claim
+          ClaimOutcome.new(success: true, local_only: result.offline_claim)
+        else
+          ClaimOutcome.new(success: false, reason: result.error, local_only: result.offline_claim)
+        end
+      end
+
+      # Reloads repository to pick up changes from other agents after a successful remote claim.
+      # Failures are logged but don't fail the claim - stale local state is better than losing
+      # a successfully committed remote claim.
+      def reload_repository_after_claim
+        repository.load!
+      rescue StandardError => e
+        warn "[ExecutionLoop] Repository reload failed after claim: #{e.message}" if $DEBUG
+      end
+
+      # Claims an atom using only the local repository, without remote synchronization.
+      def claim_locally(atom)
+        if atom.status == Models::Status[:in_progress] && atom.assignee != configuration.agent_id
+          owner = atom.assignee.to_s.empty? ? 'another agent' : atom.assignee
+          return ClaimOutcome.new(success: false, reason: "Already claimed by #{owner}")
+        end
 
         atom.status = Models::Status[:in_progress]
         atom.assignee = configuration.agent_id
         repository.update_atom(atom)
-        true
-      rescue StandardError
-        false
+
+        ClaimOutcome.new(success: true, local_only: true)
+      rescue StandardError => e
+        ClaimOutcome.new(success: false, reason: e.message)
       end
 
-      def release_claim(atom)
+      # Handles ledger sync failures based on configured offline_mode.
+      #
+      # When offline_mode is 'local' (default), falls back to local claiming
+      # and records the claim for later reconciliation. When 'fail', returns
+      # a failure outcome immediately without fallback.
+      def handle_ledger_sync_failure(atom, error)
+        if offline_mode == 'local'
+          outcome = claim_locally(atom)
+          return outcome unless outcome.success?
+
+          record_offline_claim(atom)
+          ClaimOutcome.new(success: true, local_only: true, fallback: true, error: error.message)
+        else
+          ClaimOutcome.new(success: false, reason: error.message)
+        end
+      end
+
+      def offline_mode
+        sync_config['offline_mode'] || 'local'
+      end
+
+      def record_offline_claim(atom)
+        return unless ledger_sync_state
+
+        ledger_sync_state.load if ledger_sync_state.exists?
+        ledger_sync_state.record_offline_claim(
+          atom_id: atom.id,
+          agent_id: configuration.agent_id,
+          claimed_at: clock.now
+        )
+        ledger_sync_state.save
+      rescue StandardError => e
+        warn "[ExecutionLoop] Failed to record offline claim for #{atom.id}: #{e.message}" if $DEBUG
+      end
+
+      def release_claim_locally(atom)
         current = repository.find_atom(atom.id)
         return unless current&.assignee == configuration.agent_id
 
@@ -141,8 +266,6 @@ module Eluent
         current.assignee = nil
         repository.update_atom(current)
       rescue StandardError => e
-        # Best effort release - failure is non-critical but worth noting
-        # The atom may remain claimed until manual intervention or timeout
         warn "[ExecutionLoop] Failed to release claim on #{atom.id}: #{e.message}" if $DEBUG
       end
 
@@ -184,7 +307,33 @@ module Eluent
         warn "[ExecutionLoop] Pre-work sync failed: #{e.message}" if $DEBUG
       end
 
-      def sync_after_work
+      # Syncs work results to remote repositories.
+      #
+      # On successful work completion, pushes ledger changes (atom status) to the
+      # fast-sync branch, then copies those changes to the working tree so they're
+      # included in the code commit.
+      #
+      # @param work_succeeded [Boolean] Whether the work was successful
+      def sync_after_work(work_succeeded)
+        sync_ledger_after_work if ledger_syncer_available? && work_succeeded
+        sync_git_after_work if git_adapter && work_succeeded
+      end
+
+      def sync_ledger_after_work
+        result = ledger_syncer.push_ledger
+        unless result.success
+          warn "[ExecutionLoop] Ledger push failed: #{result.error}" if $DEBUG
+          return
+        end
+
+        sync_result = ledger_syncer.sync_to_main
+        warn "[ExecutionLoop] Ledger sync to main failed: #{sync_result.error}" if $DEBUG && !sync_result.success
+      rescue Sync::LedgerSyncerError, Sync::WorktreeError, Sync::BranchError, Sync::GitError => e
+        # Log but don't fail work completion; ledger will sync later
+        warn "[ExecutionLoop] Ledger sync failed: #{e.message}" if $DEBUG
+      end
+
+      def sync_git_after_work
         git_adapter.add(paths: repository.paths.data_file)
         git_adapter.commit(message: "[eluent-agent] #{configuration.agent_id} completed work")
         git_adapter.push

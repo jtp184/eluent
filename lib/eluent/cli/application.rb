@@ -13,12 +13,14 @@ module Eluent
       COMMANDS = %w[
         init create list show update close reopen
         config ready dep comment discard sync daemon
-        formula compact plugin
+        formula compact plugin claim
       ].freeze
 
       ERROR_CODES = {
         Storage::RepositoryNotFoundError => 'REPO_NOT_FOUND',
         Storage::RepositoryExistsError => 'REPO_EXISTS',
+        Storage::ConfigError => 'CONFIG_ERROR',
+        Storage::GlobalPathsError => 'GLOBAL_PATHS_ERROR',
         Registry::AmbiguousIdError => 'AMBIGUOUS_ID',
         Registry::IdNotFoundError => 'NOT_FOUND',
         Models::ValidationError => 'VALIDATION_ERROR',
@@ -27,6 +29,11 @@ module Eluent
         Models::InvalidTransitionError => 'INVALID_TRANSITION',
         Sync::GitError => 'GIT_ERROR',
         Sync::NoRemoteError => 'NO_REMOTE',
+        Sync::LedgerSyncerError => 'LEDGER_ERROR',
+        Sync::LedgerSyncStateError => 'LEDGER_STATE_ERROR',
+        Sync::WorktreeError => 'WORKTREE_ERROR',
+        Sync::BranchError => 'BRANCH_ERROR',
+        Sync::GitTimeoutError => 'GIT_TIMEOUT',
         Daemon::AlreadyRunningError => 'DAEMON_RUNNING',
         Daemon::NotRunningError => 'DAEMON_NOT_RUNNING',
         Daemon::ProtocolError => 'PROTOCOL_ERROR',
@@ -50,6 +57,8 @@ module Eluent
         'REPO_EXISTS' => 4, 'AMBIGUOUS_ID' => 4, 'SELF_REFERENCE' => 4, 'CYCLE_DETECTED' => 4,
         'VALIDATION_ERROR' => 2, 'INVALID_TRANSITION' => 2, 'PARSE_ERROR' => 2,
         'GIT_ERROR' => 5, 'NO_REMOTE' => 5,
+        'LEDGER_ERROR' => 5, 'LEDGER_STATE_ERROR' => 5, 'WORKTREE_ERROR' => 5,
+        'BRANCH_ERROR' => 5, 'GIT_TIMEOUT' => 5, 'GLOBAL_PATHS_ERROR' => 5,
         'DAEMON_RUNNING' => 6, 'DAEMON_NOT_RUNNING' => 6, 'PROTOCOL_ERROR' => 6,
         'CONNECTION_ERROR' => 7, 'TIMEOUT' => 7,
         'COMPACTION_ERROR' => 8, 'RESTORE_ERROR' => 8,
