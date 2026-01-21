@@ -56,7 +56,7 @@ FactoryBot.define do
 
     trait :discarded do
       status { :discard }
-      close_reason { 'wont_fix' }
+      close_reason { 'wont_do' }
     end
 
     trait :wont_do do

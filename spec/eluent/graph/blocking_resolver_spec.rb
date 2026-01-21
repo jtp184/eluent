@@ -19,7 +19,7 @@ RSpec.describe Eluent::Graph::BlockingResolver do
     end
 
     it 'does not match success reasons' do
-      %w[completed done success wont_fix duplicate].each do |reason|
+      %w[completed done success wont_do duplicate].each do |reason|
         expect(reason).not_to match(described_class::FAILURE_PATTERN)
       end
     end
