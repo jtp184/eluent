@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe Eluent::Agents::Concerns::TmuxSessionManager do
+RSpec.describe Eluent::Agents::Concerns::TmuxSessionManager, :tmux_mock do
   # Create a test class that includes the concern
   let(:test_class) do
     Class.new do
@@ -237,9 +237,21 @@ RSpec.describe Eluent::Agents::Concerns::TmuxSessionManager do
   end
 
   describe '#capture_output' do
+    before { setup_tmux_mock(manager) }
+
     it 'returns empty string for empty session name' do
       expect(manager.capture_output('')).to eq('')
       expect(manager.capture_output(nil)).to eq('')
+    end
+
+    it 'captures tmux pane output for valid session' do
+      tmux_mock.set_captured_output('test-session', "Some captured output\n")
+
+      expect(manager.capture_output('test-session')).to eq("Some captured output\n")
+    end
+
+    it 'returns empty string when session has no output' do
+      expect(manager.capture_output('empty-session')).to eq('')
     end
   end
 

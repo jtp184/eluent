@@ -10,6 +10,7 @@ RSpec.describe Eluent::CLI::Commands::Ready do
   let(:atom3_id) { 'testrepo-01KFBX0000E0MK5JSH2N34CP03' }
   let(:now) { Time.now.utc.iso8601 }
   let(:older) { (Time.now.utc - 86_400).iso8601 }
+  let(:atom_counter) { { value: 0 } }
 
   before do
     FileUtils.mkdir_p(File.join(root_path, '.eluent', 'formulas'))
@@ -34,12 +35,11 @@ RSpec.describe Eluent::CLI::Commands::Ready do
   end
 
   def create_atom(attrs = {})
-    @atom_counter ||= 0
-    @atom_counter += 1
+    atom_counter[:value] += 1
 
     defaults = {
       _type: 'atom',
-      id: "testrepo-01KFBX0000E0MK5JSH2N34CP#{@atom_counter.to_s.rjust(3, '0')}",
+      id: "testrepo-01KFBX0000E0MK5JSH2N34CP#{atom_counter[:value].to_s.rjust(3, '0')}",
       title: 'Test Item',
       status: 'open',
       issue_type: 'task',

@@ -153,11 +153,12 @@ RSpec.describe Eluent::Storage::JsonlRepository do
 
       it 'updates the updated_at timestamp' do
         original_time = atom.updated_at
-        sleep 0.01
 
-        repository.update_atom(atom)
+        Timecop.travel(1) do
+          repository.update_atom(atom)
 
-        expect(atom.updated_at).to be > original_time
+          expect(atom.updated_at).to be > original_time
+        end
       end
 
       it 'persists changes to data file' do
