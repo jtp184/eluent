@@ -112,8 +112,10 @@ module Eluent
       end
 
       # Check if immediate parent blocks the child
+      # Abstract parents (epics, formulas) don't block children when open
       def blocking_parent?(parent)
         return false if parent.nil?
+        return false if parent.abstract?
 
         !parent.closed?
       end
