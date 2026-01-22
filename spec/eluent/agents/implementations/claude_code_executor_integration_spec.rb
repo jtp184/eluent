@@ -29,6 +29,7 @@ RSpec.describe 'ClaudeCodeExecutor integration', :integration do
   describe 'session lifecycle' do
     it 'creates and cleans up tmux sessions' do
       allow(executor).to receive(:claude_code_available?).and_return(true)
+      allow(executor).to receive(:claude_code_command).and_return('sleep 60')
 
       closed_atom = Eluent::Models::Atom.new(
         id: 'INT-TEST-123',

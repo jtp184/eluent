@@ -44,7 +44,7 @@ FactoryBot.define do
       end
 
       parent_id { atom&.id || 'testrepo-01JBZTMQ1RABCDEFGHKMNPQRST' }
-      id { "#{parent_id}-c#{rand(1..99)}" }
+      sequence(:id) { |n| "#{parent_id}-c#{n}" }
     end
 
     # Timestamp traits

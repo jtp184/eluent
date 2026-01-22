@@ -76,3 +76,6 @@ RSpec/ContextWording:
 
 RSpec/NestedGroups:
   Max: 4
+
+FactoryBot/IdSequence:
+  Enabled: false

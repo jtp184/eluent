@@ -31,9 +31,12 @@ RSpec.describe Eluent::CLI::Commands::List do
   end
 
   def create_atom(attrs = {})
+    @atom_counter ||= 0
+    @atom_counter += 1
+
     defaults = {
       _type: 'atom',
-      id: "testrepo-01KFBX0000E0MK5JSH2N34CP#{rand(0..999).to_s.rjust(2, '0')}",
+      id: "testrepo-01KFBX0000E0MK5JSH2N34CP#{@atom_counter.to_s.rjust(3, '0')}",
       title: 'Test Item',
       status: 'open',
       issue_type: 'task',
