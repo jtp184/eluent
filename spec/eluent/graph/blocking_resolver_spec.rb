@@ -144,8 +144,8 @@ RSpec.describe Eluent::Graph::BlockingResolver do
       end
     end
 
-    context 'with parent_child blocking when parent is open' do
-      let(:parent_atom) { build(:atom, :open) }
+    context 'with parent_child blocking when non-abstract parent is open' do
+      let(:parent_atom) { build(:atom, :open, issue_type: :task) }
       let(:child_atom) { build(:atom, :open, parent_id: parent_atom.id) }
 
       before do
@@ -156,6 +156,21 @@ RSpec.describe Eluent::Graph::BlockingResolver do
       it 'blocks child when parent is not closed' do
         result = resolver.blocked?(child_atom)
         expect(result[:blocked]).to be true
+      end
+    end
+
+    context 'with parent_child when abstract parent (epic) is open' do
+      let(:epic_parent) { build(:atom, :epic) }
+      let(:child_atom) { build(:atom, :open, parent_id: epic_parent.id) }
+
+      before do
+        indexer.index_atom(epic_parent)
+        indexer.index_atom(child_atom)
+      end
+
+      it 'does not block child' do
+        result = resolver.blocked?(child_atom)
+        expect(result[:blocked]).to be false
       end
     end
 
