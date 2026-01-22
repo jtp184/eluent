@@ -13,7 +13,7 @@ ClaudeCodeExecutor < AgentExecutor
     └── monitors atom status via repository polling
 ```
 
-**Completion Signal:** Claude Code runs `el close {id}` to mark work done. The executor detects this by polling `repository.find_atom(id)` and checking for terminal statuses: `closed`, `wont_do`, or `discard`.
+**Completion Signal:** Claude Code runs `el close {id}` to mark work done. The executor detects this by polling `repository.find_atom(id)` and checking for terminal statuses: `closed`, `deferred`, `wont_do`, or `discard`.
 
 ## Implementation
 
@@ -97,7 +97,7 @@ module Eluent
 
         def generate_session_name(atom)
           safe_id = atom.id.to_s.gsub(/[^a-zA-Z0-9]/, "-")[0..7]
-          "eluent-#{safe_id}-#{Time.now.to_i}-#{SecureRandom.hex(2)}"
+          "eluent-#{safe_id}-#{Time.now.to_i}-#{SecureRandom.hex(4)}"
         end
 
         def monotonic_now
@@ -134,16 +134,13 @@ module Eluent
         def start_session(name, atom, prompt)
           context_file = write_context_file(atom, prompt)
           working_dir = resolve_working_directory
+          cmd = "#{Shellwords.escape(claude_code_command)} -p #{Shellwords.escape(context_file)}"
 
-          run_tmux("new-session", "-d", "-s", name, "-c", working_dir) or
+          run_tmux("new-session", "-d", "-s", name, "-c", working_dir, cmd) or
             raise session_error("Failed to create tmux session", name, :create)
 
           wait_for_session(name) or
             raise session_error("Session created but not accessible", name, :create)
-
-          cmd = "claude -p #{Shellwords.escape(context_file)}"
-          run_tmux("send-keys", "-t", name, cmd, "Enter") or
-            raise session_error("Failed to send command to session", name, :send_keys)
         end
 
         def wait_for_session(name, timeout: SESSION_START_TIMEOUT)
@@ -235,27 +232,28 @@ module Eluent
         end
 
         def instructions_section(atom)
+          safe_id = Shellwords.escape(atom.id)
           <<~MARKDOWN
             ## Instructions
 
             Complete this task. When finished, run:
 
             ```bash
-            el close #{atom.id} --reason "Brief summary of work completed"
+            el close #{safe_id} --reason "Brief summary of work completed"
             ```
 
             If the task cannot be completed now but may be revisited later:
 
             ```bash
-            el update #{atom.id} --status deferred
-            el comment add #{atom.id} "Reason this task is deferred..."
+            el update #{safe_id} --status deferred
+            el comment add #{safe_id} "Reason this task is deferred..."
             ```
 
             If the task should not be completed at all:
 
             ```bash
-            el update #{atom.id} --status wont_do
-            el comment add #{atom.id} "Reason this task will not be done..."
+            el update #{safe_id} --status wont_do
+            el comment add #{safe_id} "Reason this task will not be done..."
             ```
           MARKDOWN
         end
@@ -324,7 +322,7 @@ ExecutionLoop                          ClaudeCodeExecutor
                                               ├─ validates configuration
                                               ├─ writes context file
                                               ├─ creates tmux session
-                                              ├─ sends `claude --resume -p {file}`
+                                              ├─ sends `claude -p {file}`
                                               │
                                               │  ┌─────── poll loop ───────┐
                                               │  │ check timeout           │

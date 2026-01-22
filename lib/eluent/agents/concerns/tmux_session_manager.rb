@@ -25,7 +25,7 @@ module Eluent
         def start_session(name, atom, prompt)
           context_file = write_context_file(atom, prompt)
           working_dir = resolve_working_directory
-          cmd = "#{claude_code_command} -p #{Shellwords.escape(context_file)}"
+          cmd = "#{Shellwords.escape(claude_code_command)} -p #{Shellwords.escape(context_file)}"
 
           run_tmux('new-session', '-d', '-s', name, '-c', working_dir, cmd) or
             raise session_error('Failed to create tmux session', name, :create)
@@ -135,27 +135,28 @@ module Eluent
         end
 
         def instructions_section(atom)
+          safe_id = Shellwords.escape(atom.id)
           <<~MARKDOWN
             ## Instructions
 
             Complete this task. When finished, run:
 
             ```bash
-            el close #{atom.id} --reason "Brief summary of work completed"
+            el close #{safe_id} --reason "Brief summary of work completed"
             ```
 
             If the task cannot be completed now but may be revisited later:
 
             ```bash
-            el update #{atom.id} --status deferred
-            el comment add #{atom.id} "Reason this task is deferred..."
+            el update #{safe_id} --status deferred
+            el comment add #{safe_id} "Reason this task is deferred..."
             ```
 
             If the task should not be completed at all:
 
             ```bash
-            el update #{atom.id} --status wont_do
-            el comment add #{atom.id} "Reason this task will not be done..."
+            el update #{safe_id} --status wont_do
+            el comment add #{safe_id} "Reason this task will not be done..."
             ```
           MARKDOWN
         end

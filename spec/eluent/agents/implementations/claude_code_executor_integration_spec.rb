@@ -44,7 +44,7 @@ RSpec.describe 'ClaudeCodeExecutor integration', :integration do
 
       # Session should be cleaned up
       session_pattern = 'eluent-INT-TEST'
-      sessions = `tmux list-sessions 2>/dev/null | grep #{session_pattern}`
+      sessions = `tmux list-sessions 2>/dev/null`.lines.grep(/#{Regexp.escape(session_pattern)}/)
       expect(sessions).to be_empty
     end
 

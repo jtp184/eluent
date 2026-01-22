@@ -79,7 +79,7 @@ module Eluent
 
         def claude_code_available?
           path = configuration.claude_code_path
-          path.include?('/') ? File.executable?(path) : system("command -v #{path} > /dev/null 2>&1")
+          path.include?('/') ? File.executable?(path) : system('command', '-v', path, out: File::NULL, err: File::NULL)
         end
 
         def generate_session_name(atom)
