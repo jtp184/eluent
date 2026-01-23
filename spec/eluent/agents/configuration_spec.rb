@@ -150,7 +150,8 @@ RSpec.describe Eluent::Agents::Configuration do
       config = described_class.new(
         claude_api_key: 'secret',
         openai_api_key: nil,
-        agent_id: 'test-agent'
+        agent_id: 'test-agent',
+        skip_api_validation: true
       )
 
       hash = config.to_h
@@ -158,8 +159,100 @@ RSpec.describe Eluent::Agents::Configuration do
       expect(hash[:agent_id]).to eq('test-agent')
       expect(hash[:claude_configured]).to be true
       expect(hash[:openai_configured]).to be false
+      expect(hash[:skip_api_validation]).to be true
       expect(hash).not_to have_key(:claude_api_key)
       expect(hash).not_to have_key(:openai_api_key)
+    end
+  end
+
+  describe 'Claude Code configuration' do
+    it 'has default claude_code_path' do
+      allow(ENV).to receive(:fetch).and_return(nil)
+      config = described_class.new
+
+      expect(config.claude_code_path).to eq('claude')
+    end
+
+    it 'accepts custom claude_code_path' do
+      allow(ENV).to receive(:fetch).and_return(nil)
+      config = described_class.new(claude_code_path: '/usr/local/bin/claude')
+
+      expect(config.claude_code_path).to eq('/usr/local/bin/claude')
+    end
+
+    it 'has nil working_directory by default' do
+      allow(ENV).to receive(:fetch).and_return(nil)
+      config = described_class.new
+
+      expect(config.working_directory).to be_nil
+    end
+
+    it 'accepts custom working_directory' do
+      allow(ENV).to receive(:fetch).and_return(nil)
+      config = described_class.new(working_directory: '/my/project')
+
+      expect(config.working_directory).to eq('/my/project')
+    end
+
+    it 'has preserve_sessions false by default' do
+      allow(ENV).to receive(:fetch).and_return(nil)
+      config = described_class.new
+
+      expect(config.preserve_sessions).to be false
+    end
+
+    it 'accepts preserve_sessions flag' do
+      allow(ENV).to receive(:fetch).and_return(nil)
+      config = described_class.new(preserve_sessions: true)
+
+      expect(config.preserve_sessions).to be true
+    end
+
+    it 'has default context_directory' do
+      allow(ENV).to receive(:fetch).and_return(nil)
+      config = described_class.new
+
+      expect(config.context_directory).to eq('.eluent/agent-context')
+    end
+
+    it 'accepts custom context_directory' do
+      allow(ENV).to receive(:fetch).and_return(nil)
+      config = described_class.new(context_directory: '.custom/context')
+
+      expect(config.context_directory).to eq('.custom/context')
+    end
+
+    it 'has skip_api_validation false by default' do
+      allow(ENV).to receive(:fetch).and_return(nil)
+      config = described_class.new
+
+      expect(config.skip_api_validation).to be false
+    end
+
+    it 'accepts skip_api_validation flag' do
+      allow(ENV).to receive(:fetch).and_return(nil)
+      config = described_class.new(skip_api_validation: true)
+
+      expect(config.skip_api_validation).to be true
+    end
+  end
+
+  describe '#validate! with skip_api_validation' do
+    it 'skips API key check when skip_api_validation is true' do
+      allow(ENV).to receive(:fetch).and_return(nil)
+      config = described_class.new(skip_api_validation: true)
+
+      expect { config.validate! }.not_to raise_error
+    end
+
+    it 'still validates other fields when skip_api_validation is true' do
+      allow(ENV).to receive(:fetch).and_return(nil)
+      config = described_class.new(skip_api_validation: true, execution_timeout: -1)
+
+      expect { config.validate! }.to raise_error(
+        Eluent::Agents::ConfigurationError,
+        /Execution timeout must be positive/
+      )
     end
   end
 end

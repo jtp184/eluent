@@ -37,7 +37,7 @@ module Eluent
       end
     end
 
-    # Raised when rate limited by API
+    # Raised when an API rate limit is exceeded
     class RateLimitError < ApiError
       attr_reader :retry_after
 
@@ -47,9 +47,9 @@ module Eluent
       end
     end
 
-    # Raised when authentication fails
+    # Raised when API authentication fails
     class AuthenticationError < ApiError
-      def initialize(message = 'Authentication failed', status_code: 401, **)
+      def initialize(message = 'Authentication failed', status_code: 401, response_body: nil)
         super
       end
     end
@@ -72,6 +72,17 @@ module Eluent
         super(message)
         @atom_id = atom_id
         @reason = reason
+      end
+    end
+
+    # Raised when a tmux session operation fails (create, monitor, destroy)
+    class SessionError < AgentError
+      attr_reader :session_name, :operation
+
+      def initialize(message, session_name: nil, operation: nil)
+        super(message)
+        @session_name = session_name
+        @operation = operation
       end
     end
   end
